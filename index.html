@@ -1,0 +1,990 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0f3d33">
+<title>Family Budget</title>
+<style>
+  :root{
+    --bg:#f4f5f2; --card:#ffffff; --ink:#1a2b26; --muted:#6b7a74; --line:#e3e7e2;
+    --brand:#0f3d33; --brand2:#177a5b; --accent:#e8f3ee;
+    --good:#177a5b; --warn:#b3722a; --bad:#b3372a; --info:#2a5cb3;
+    --r:14px; --shadow:0 1px 3px rgba(15,61,51,.08),0 4px 14px rgba(15,61,51,.06);
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  html{font-size:16px}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--ink);min-height:100vh;padding-bottom:calc(76px + env(safe-area-inset-bottom))}
+  header.top{position:sticky;top:0;z-index:20;background:var(--brand);color:#fff;
+    padding:calc(12px + env(safe-area-inset-top)) 16px 12px;display:flex;align-items:center;justify-content:space-between}
+  header.top h1{font-size:1.15rem;font-weight:700;letter-spacing:.2px}
+  header.top .sub{font-size:.75rem;opacity:.75;margin-top:2px}
+  .gear{background:rgba(255,255,255,.14);border:none;color:#fff;border-radius:10px;
+    padding:8px 12px;font-size:1rem;cursor:pointer}
+  main{padding:14px 14px 20px;max-width:640px;margin:0 auto}
+  h2.section{font-size:.8rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);
+    margin:18px 4px 8px;font-weight:700}
+  .card{background:var(--card);border-radius:var(--r);box-shadow:var(--shadow);
+    padding:14px;margin-bottom:10px;border:1px solid var(--line)}
+  .card.tappable{cursor:pointer}
+  .row{display:flex;align-items:center;gap:10px}
+  .row .grow{flex:1;min-width:0}
+  .money{font-variant-numeric:tabular-nums;font-weight:700}
+  .big{font-size:1.5rem}
+  .muted{color:var(--muted);font-size:.82rem}
+  .small{font-size:.78rem}
+  .title{font-weight:600;font-size:.95rem}
+  .badge{display:inline-block;font-size:.66rem;font-weight:700;padding:2px 8px;border-radius:99px;
+    text-transform:uppercase;letter-spacing:.04em}
+  .b-ess{background:#fdecea;color:var(--bad)} .b-imp{background:#fdf3e5;color:var(--warn)}
+  .b-opt{background:#eef2f7;color:#5a6b80} .b-auto{background:var(--accent);color:var(--brand2)}
+  .b-info{background:#e7eefb;color:var(--info)}
+  .bar{height:8px;border-radius:99px;background:#e8ece9;overflow:hidden;margin-top:6px}
+  .bar>i{display:block;height:100%;border-radius:99px;background:var(--brand2);transition:width .3s}
+  .bar>i.over{background:var(--info)} .bar>i.low{background:var(--warn)}
+  .btn{border:none;border-radius:11px;font-weight:700;font-size:.9rem;padding:11px 16px;
+    cursor:pointer;background:var(--brand);color:#fff}
+  .btn.sec{background:var(--accent);color:var(--brand)}
+  .btn.ghost{background:transparent;color:var(--brand);border:1.5px solid var(--brand)}
+  .btn.danger{background:#fdecea;color:var(--bad)}
+  .btn.sm{padding:8px 12px;font-size:.82rem;border-radius:9px}
+  .btn:disabled{opacity:.45}
+  .btn-row{display:flex;gap:8px;margin-top:12px}
+  .btn-row .btn{flex:1}
+  /* action cards */
+  .action{border-left:4px solid var(--brand2)}
+  .action.due{border-left-color:var(--bad)}
+  .action.upcoming{opacity:.72;border-left-color:#c6cfca}
+  .action .when{font-size:.72rem;font-weight:700;color:var(--brand2);text-transform:uppercase;letter-spacing:.05em}
+  .action.due .when{color:var(--bad)}
+  .check{width:26px;height:26px;border-radius:8px;border:2px solid #c9d2cd;background:#fff;
+    flex:none;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:.9rem;color:#fff}
+  .check.on{background:var(--brand2);border-color:var(--brand2)}
+  .selbar{position:fixed;left:10px;right:10px;bottom:calc(66px + env(safe-area-inset-bottom));z-index:28;
+    background:var(--ink);color:#fff;border-radius:14px;padding:10px 14px;display:flex;align-items:center;gap:10px;
+    box-shadow:0 6px 20px rgba(15,61,51,.4)}
+  .selbar .grow{flex:1}
+  .selbar .small{opacity:.75;font-size:.72rem}
+  .empty{padding:26px 14px;text-align:center;color:var(--muted);font-size:.88rem}
+  /* nav */
+  nav.tabs{position:fixed;bottom:0;left:0;right:0;z-index:30;background:#fff;border-top:1px solid var(--line);
+    display:flex;padding-bottom:env(safe-area-inset-bottom)}
+  nav.tabs button{flex:1;background:none;border:none;padding:9px 0 7px;font-size:.68rem;font-weight:600;
+    color:#93a29b;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px}
+  nav.tabs button .ico{font-size:1.25rem;line-height:1}
+  nav.tabs button.on{color:var(--brand)}
+  /* modal */
+  .overlay{position:fixed;inset:0;background:rgba(12,25,21,.5);z-index:40;display:flex;
+    align-items:flex-end;justify-content:center}
+  @media(min-width:520px){.overlay{align-items:center}}
+  .sheet{background:#fff;width:100%;max-width:560px;max-height:92vh;overflow-y:auto;
+    border-radius:20px 20px 0 0;padding:18px 18px calc(18px + env(safe-area-inset-bottom))}
+  @media(min-width:520px){.sheet{border-radius:20px}}
+  .sheet h3{font-size:1.05rem;margin-bottom:4px}
+  .field{margin-top:12px}
+  .field label{display:block;font-size:.76rem;font-weight:700;color:var(--muted);margin-bottom:5px;
+    text-transform:uppercase;letter-spacing:.04em}
+  .field input,.field select,.field textarea{width:100%;padding:11px 12px;font-size:1rem;
+    border:1.5px solid var(--line);border-radius:10px;background:#fafbfa;color:var(--ink);font-family:inherit}
+  .field input:focus,.field select:focus{outline:none;border-color:var(--brand2)}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .alloc-line{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--line)}
+  .alloc-line:last-child{border-bottom:none}
+  .alloc-line .lbl{flex:1;font-size:.9rem}
+  .alloc-line input{width:110px;text-align:right;padding:8px 10px;font-size:1rem;font-weight:700;
+    border:1.5px solid var(--line);border-radius:9px;font-variant-numeric:tabular-nums}
+  .stay{background:var(--accent);border-radius:10px;padding:10px 12px;margin-top:10px;
+    display:flex;justify-content:space-between;font-weight:700}
+  .stay.neg{background:#fdecea;color:var(--bad)}
+  .banner{border-radius:var(--r);padding:12px 14px;margin-bottom:10px;font-size:.88rem;
+    background:#e7eefb;color:#1c3f78;border:1px solid #cddcf5}
+  .banner b{display:block;margin-bottom:2px}
+  .banner.gold{background:#fdf6e3;color:#7a5a12;border-color:#f1e2b6}
+  .env-line{padding:10px 0;border-bottom:1px solid var(--line)}
+  .env-line:last-child{border-bottom:none}
+  .hist{padding:9px 0;border-bottom:1px solid var(--line);font-size:.85rem}
+  .hist:last-child{border-bottom:none}
+  .hist .d{color:var(--muted);font-size:.72rem}
+  .link{color:var(--brand2);font-weight:700;background:none;border:none;font-size:.85rem;cursor:pointer;padding:4px}
+  .fab{position:fixed;right:16px;bottom:calc(84px + env(safe-area-inset-bottom));z-index:25;
+    width:52px;height:52px;border-radius:50%;background:var(--brand);color:#fff;font-size:1.6rem;
+    border:none;box-shadow:0 4px 14px rgba(15,61,51,.35);cursor:pointer;display:none;align-items:center;justify-content:center}
+  .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(96px + env(safe-area-inset-bottom));
+    background:var(--ink);color:#fff;padding:10px 18px;border-radius:99px;font-size:.85rem;z-index:60;
+    opacity:0;transition:opacity .25s;pointer-events:none;max-width:90vw;text-align:center}
+  .toast.show{opacity:1}
+  .setup-step{display:none} .setup-step.on{display:block}
+  .dots{display:flex;gap:6px;justify-content:center;margin:10px 0 4px}
+  .dots i{width:8px;height:8px;border-radius:50%;background:var(--line)}
+  .dots i.on{background:var(--brand2)}
+</style>
+</head>
+<body>
+<header class="top">
+  <div>
+    <h1 id="hdrTitle">Family Budget</h1>
+    <div class="sub" id="hdrSub"></div>
+  </div>
+  <div class="row" style="gap:8px">
+    <span id="syncStat" class="small" style="opacity:.8;display:none"></span>
+    <button class="gear" id="gearBtn" title="Settings">⚙︎</button>
+  </div>
+</header>
+<main id="main"></main>
+<button class="fab" id="fab">+</button>
+<nav class="tabs" id="tabs">
+  <button data-tab="today" class="on"><span class="ico">☑︎</span>Today</button>
+  <button data-tab="spend"><span class="ico">💳</span>Spend</button>
+  <button data-tab="accounts"><span class="ico">🏦</span>Accounts</button>
+  <button data-tab="bills"><span class="ico">🧾</span>Bills</button>
+  <button data-tab="more"><span class="ico">≡</span>More</button>
+</nav>
+<div id="modalRoot"></div>
+<div class="toast" id="toast"></div>
+<script>
+/* ================= storage ================= */
+const KEY='familyBudget.v1';
+let mem=null;
+function loadState(){
+  try{const raw=localStorage.getItem(KEY); if(raw) return JSON.parse(raw);}catch(e){}
+  return mem;
+}
+let lastSerial=null;
+function saveState(){
+  let serial;
+  try{const {ts,...rest}=S;serial=JSON.stringify(rest);}catch(e){serial=null}
+  if(serial!==null&&serial!==lastSerial){
+    const changed=lastSerial!==null;
+    lastSerial=serial;
+    if(changed){S.ts=Date.now();scheduleSyncPush();} // only push real changes
+  }
+  try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){mem=S;}
+}
+/* ================= seed data ================= */
+function seedBills(){
+  return []; // hosted version starts empty — real data arrives via sync or is entered by hand
+}
+function hash(s){let h=0;for(let i=0;i<s.length;i++){h=(h<<5)-h+s.charCodeAt(i);h|=0}return h}
+function freshState(){
+  return {
+    v:1, setupDone:false,
+    people:[
+      {id:'p1',name:'Person 1', amount:0, dow:5, nextPay:null},
+      {id:'p2',name:'Person 2', amount:0, dow:6, nextPay:null}
+    ],
+    plan:{food:0, entCash:0, allowCash:0, billsMode:'auto', billsFixed:0, roundTo:5},
+    accounts:{main:0,bills:0,savings:0},
+    bills:seedBills(),
+    cats:seedCats(), txns:[],
+    history:[], expenses:[],
+    lastReconcile:null, dismissed:{}
+  };
+}
+function seedCats(){
+  return [
+    {id:'c-food',name:'Food',monthly:0,show:true},
+    {id:'c-gas',name:'Gas / Fuel',monthly:0,show:true},
+    {id:'c-ent',name:'Entertainment',monthly:0,show:false},
+    {id:'c-allow',name:'Personal Allowances',monthly:0,show:false},
+    {id:'c-other',name:'Other / Misc',monthly:0,show:false}
+  ];
+}
+let S=loadState()||freshState();
+/* migrate older saved data */
+if(!S.cats){S.cats=seedCats();}
+if(!S.txns){S.txns=[];}
+if(!S.v||S.v<2){
+  for(const c of S.cats) if(c.show===undefined) c.show=(c.id==='c-food');
+  if(!S.cats.some(c=>c.name.toLowerCase().includes('gas')))
+    S.cats.splice(1,0,{id:'c-gas',name:'Gas / Fuel',monthly:400,show:true});
+  const gi=S.bills.findIndex(b=>b.name.toLowerCase().includes('gas'));
+  if(gi>-1)S.bills.splice(gi,1); // gas is now a spending category; its saved money returns to unallocated
+  S.v=2;
+}
+/* ================= helpers ================= */
+const $=q=>document.querySelector(q);
+const fmt=n=>(n<0?'-':'')+'$'+Math.abs(n).toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0});
+const fmt2=n=>(n<0?'-':'')+'$'+Math.abs(n).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function todayISO(){const d=new Date();return iso(d)}
+function iso(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
+function parseISO(s){const[y,m,d]=s.split('-').map(Number);return new Date(y,m-1,d)}
+function addDays(s,n){const d=parseISO(s);d.setDate(d.getDate()+n);return iso(d)}
+function daysBetween(a,b){return Math.round((parseISO(b)-parseISO(a))/86400000)}
+function fmtDate(s){const d=parseISO(s);return d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})}
+function nextDow(dow){const d=new Date();const diff=(dow-d.getDay()+7)%7;d.setDate(d.getDate()+(diff===0?0:diff));return iso(d)}
+function clampDay(y,m,day){const last=new Date(y,m+1,0).getDate();return new Date(y,m,Math.min(day,last))}
+/* per-bill weekly accrual */
+function weeklyNeed(b){return b.amt*12/b.months/52}
+function suggestedBills(){
+  const w=S.bills.reduce((t,b)=>t+weeklyNeed(b),0);
+  const r=S.plan.roundTo||5;
+  return Math.ceil(w/r)*r;
+}
+function billsTransferAmt(){return S.plan.billsMode==='fixed'?S.plan.billsFixed:suggestedBills()}
+/* next due date for a bill */
+function nextDue(b){
+  const t=new Date();
+  if(b.lastPaid){
+    const lp=parseISO(b.lastPaid);
+    let d=clampDay(lp.getFullYear(),lp.getMonth()+b.months,b.dueDay||15);
+    while(d<parseISO(b.lastPaid)) d=clampDay(d.getFullYear(),d.getMonth()+b.months,b.dueDay||15);
+    return iso(d);
+  }
+  let d=clampDay(t.getFullYear(),t.getMonth(),b.dueDay||15);
+  while(iso(d)<todayISO()) d=clampDay(d.getFullYear(),d.getMonth()+b.months,b.dueDay||15);
+  return iso(d);
+}
+function fundedPct(b){return b.amt<=0?100:Math.min(999,Math.round(b.saved/b.amt*100))}
+function envelopeTotal(){return S.bills.reduce((t,b)=>t+b.saved,0)}
+/* paydays of a person within the calendar month of dateISO */
+function paydaysInMonth(p,dateISO){
+  if(!p.nextPay) return [];
+  const target=parseISO(dateISO);
+  let d=parseISO(p.nextPay);
+  // walk backwards to well before the month
+  while(d>new Date(target.getFullYear(),target.getMonth()-1,1)) d.setDate(d.getDate()-14);
+  const list=[];
+  while(d<new Date(target.getFullYear(),target.getMonth()+1,1)){
+    if(d.getMonth()===target.getMonth()&&d.getFullYear()===target.getFullYear()) list.push(iso(d));
+    d.setDate(d.getDate()+14);
+  }
+  return list;
+}
+function isExtraPaycheck(p,dateISO){
+  const list=paydaysInMonth(p,dateISO);
+  return list.length>=3&&list.indexOf(dateISO)===list.length-1;
+}
+function log(type,text,amt){
+  S.history.unshift({d:todayISO(),type,text,amt:amt==null?null:amt});
+  if(S.history.length>400)S.history.length=400;
+}
+let toastTimer=null;
+function toast(msg){const t=$('#toast');t.textContent=msg;t.classList.add('show');
+  clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.classList.remove('show'),2600)}
+</script>
+<script>
+/* ================= actions engine ================= */
+const HORIZON=7; // days ahead to surface bill actions
+function buildActions(){
+  const acts=[],today=todayISO();
+  // paychecks landed (or overdue to allocate)
+  for(const p of S.people){
+    if(!p.nextPay) continue;
+    if(p.nextPay<=today){
+      const extra=isExtraPaycheck(p,p.nextPay);
+      acts.push({kind:'paycheck',id:'pay-'+p.id+'-'+p.nextPay,person:p,date:p.nextPay,extra,
+        due:true,sort:p.nextPay});
+    }
+  }
+  // bills due within horizon or overdue
+  for(const b of S.bills){
+    const d=nextDue(b);
+    const dd=daysBetween(today,d);
+    if(dd<=HORIZON){
+      acts.push({kind:'bill',id:'bill-'+b.id+'-'+d,bill:b,date:d,due:dd<=1,sort:d});
+    }
+  }
+  // weekly reconcile
+  if(!S.lastReconcile||daysBetween(S.lastReconcile,today)>=7){
+    acts.push({kind:'reconcile',id:'rec-'+today,date:today,due:false,sort:today+'~'});
+  }
+  acts.sort((a,b)=>a.sort<b.sort?-1:1);
+  return acts.filter(a=>!S.dismissed[a.id]);
+}
+function upcomingPreview(){
+  const today=todayISO(),list=[];
+  for(const p of S.people){
+    if(!p.nextPay) continue;
+    let d=p.nextPay; if(d<=today) d=addDays(d,14);
+    if(daysBetween(today,d)<=7) list.push({kind:'pay',t:'💵 '+p.name+'’s paycheck '+fmt(p.amount),d});
+  }
+  for(const b of S.bills){
+    const d=nextDue(b),dd=daysBetween(today,d);
+    if(dd>HORIZON&&dd<=30) list.push({kind:'bill',bill:b,t:'🧾 '+b.name+' — '+fmt(b.amt),d});
+  }
+  list.sort((a,b)=>a.d<b.d?-1:1);
+  return list;
+}
+/* ---- multi-select bill paying ---- */
+const SEL=new Map(); // bill id -> due date being paid
+function toggleSel(id,due){
+  if(SEL.has(id))SEL.delete(id);else SEL.set(id,due);
+  render();
+}
+function clearSel(){SEL.clear();render()}
+function selTotal(){
+  let t=0;for(const id of SEL.keys()){const b=S.bills.find(x=>x.id===id);if(b)t+=b.amt}
+  return t;
+}
+function checkHTML(b,due){
+  const on=SEL.has(b.id);
+  return '<div class="check'+(on?' on':'')+'" onclick="event.stopPropagation();toggleSel(\''+b.id+'\',\''+due+'\')">'+(on?'✓':'')+'</div>';
+}
+function openBatchPay(){
+  const items=[];let total=0;
+  for(const [id,due] of SEL){const b=S.bills.find(x=>x.id===id);if(b){items.push({b,due});total+=b.amt}}
+  if(!items.length)return;
+  items.sort((a,b)=>a.due<b.due?-1:1);
+  let rows=items.map(i=>'<div class="alloc-line"><div class="lbl">'+(i.b.auto?'⚡ ':'')+esc(i.b.name)+
+    '<br><span class="muted small">due '+fmtDate(i.due)+' · '+fundedPct(i.b)+'% saved</span></div>'+
+    '<div class="money">'+fmt2(i.b.amt)+'</div></div>').join('');
+  modal('<h3>Pay '+items.length+' bills</h3>'+rows+
+    '<div class="stay"><span>Transfer from Bills → Main</span><span>'+fmt2(total)+'</span></div>'+
+    '<div class="muted small" style="margin-top:10px">Make that one transfer in your bank, then pay the manual ones — the ⚡ autopays will clear on their own once the money is in Main.</div>'+
+    '<div class="btn-row"><button class="btn ghost" onclick="closeModal()">Cancel</button>'+
+    '<button class="btn" onclick="confirmBatchPay()">Done — all paid ✓</button></div>');
+}
+function confirmBatchPay(){
+  let total=0;const names=[];
+  for(const [id,due] of SEL){
+    const b=S.bills.find(x=>x.id===id);if(!b)continue;
+    S.accounts.bills=+(S.accounts.bills-b.amt).toFixed(2);
+    b.saved=Math.max(0,+(b.saved-b.amt).toFixed(2));
+    b.lastPaid=due; // due date being covered, so the next cycle computes correctly even when paying early
+    total+=b.amt;names.push(b.name);
+  }
+  log('bill','Paid '+names.length+' bills ('+names.join(', ')+')',total);
+  SEL.clear();closeModal();render();
+  toast('Marked paid — transfer '+fmt(total)+' from Bills → Main');
+}
+/* ================= spending budgets ================= */
+function monthKey(){return todayISO().slice(0,7)}
+function monthLabel(){return new Date().toLocaleDateString('en-US',{month:'long'})}
+function monthSpent(catId){
+  const mk=monthKey();
+  return S.txns.filter(t=>t.d.slice(0,7)===mk&&t.cat===catId).reduce((s,t)=>s+t.amt,0);
+}
+function budgetBarsHTML(compact){
+  let h='';
+  for(const c of S.cats){
+    const spent=monthSpent(c.id);
+    if(compact&&!c.show)continue;
+    const pct=c.monthly>0?Math.round(spent/c.monthly*100):0;
+    const left=c.monthly-spent;
+    const col=c.monthly>0?(pct>100?'var(--bad)':pct>=80?'var(--warn)':'var(--good)'):'var(--muted)';
+    h+='<div class="env-line"><div class="row"><div class="grow"><span class="title small">'+esc(c.name)+'</span></div>'+
+      '<div class="money small">'+fmt(spent)+(c.monthly>0?' <span class="muted">/ '+fmt(c.monthly)+'</span> <b style="color:'+col+'">'+pct+'%</b>':'')+'</div></div>'+
+      (c.monthly>0?'<div class="bar"><i style="width:'+Math.min(100,pct)+'%;background:'+col+'"></i></div>'+
+      '<div class="muted small" style="margin-top:3px">'+(left>=0?fmt(left)+' left this month':fmt(-left)+' over budget')+'</div>':'')+
+      '</div>';
+  }
+  return h;
+}
+/* ================= views ================= */
+let TAB='today';
+function render(){
+  $('#hdrSub').textContent=new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'});
+  document.querySelectorAll('nav.tabs button').forEach(b=>b.classList.toggle('on',b.dataset.tab===TAB));
+  $('#fab').style.display=TAB==='bills'?'flex':'none';
+  const m=$('#main');
+  if(TAB==='today')m.innerHTML=viewToday();
+  else if(TAB==='spend')m.innerHTML=viewSpend();
+  else if(TAB==='accounts')m.innerHTML=viewAccounts();
+  else if(TAB==='bills')m.innerHTML=viewBills();
+  else m.innerHTML=viewMore();
+  saveState();
+}
+function viewToday(){
+  const acts=buildActions();
+  let h='';
+  const extras=acts.filter(a=>a.kind==='paycheck'&&a.extra);
+  for(const a of extras)
+    h+='<div class="banner gold"><b>🎉 Extra paycheck month!</b>'+esc(a.person.name)+
+       '’s check on '+fmtDate(a.date)+' is the 3rd this month — a great one to push extra into savings.</div>';
+  h+='<h2 class="section">'+monthLabel()+' spending</h2>'+
+     '<div class="card tappable" onclick="TAB=\'spend\';render()">'+budgetBarsHTML(true)+
+     '<div class="muted small" style="margin-top:8px;text-align:center;color:var(--brand2);font-weight:700">Tap to log charges →</div></div>';
+  h+='<h2 class="section">Actions needed</h2>';
+  if(!S.bills.length)
+    h+='<div class="banner"><b>No bills yet</b>Add your bills on the Bills tab (the + button) — amounts, how often, and the day they’re due. The app takes it from there.</div>';
+  if(!acts.length) h+='<div class="card empty">Nothing to do right now. 🎉<br>Check back on payday.</div>';
+  for(const a of acts){
+    if(a.kind==='paycheck'){
+      const p=a.person;
+      h+='<div class="card action'+(a.due?' due':'')+'"><div class="row">'+
+        '<div class="grow"><div class="when">Paycheck · '+fmtDate(a.date)+'</div>'+
+        '<div class="title">💵 '+esc(p.name)+'’s paycheck landed — '+fmt(p.amount)+'</div>'+
+        '<div class="muted">Allocate it: transfer to Bills & Savings, pull cash.</div></div>'+
+        '<button class="btn sm" onclick="openPaycheck(\''+p.id+'\')">Allocate</button></div></div>';
+    }else if(a.kind==='bill'){
+      const b=a.bill,pct=fundedPct(b),overdue=a.date<todayISO();
+      h+='<div class="card action'+(a.due?' due':'')+'"><div class="row">'+
+        checkHTML(b,a.date)+
+        '<div class="grow"><div class="when">'+(overdue?'Overdue · was ':'Bill due · ')+fmtDate(a.date)+'</div>'+
+        '<div class="title">'+(b.auto?'⚡ ':'')+esc(b.name)+' — '+fmt(b.amt)+'</div>'+
+        '<div class="muted">'+(b.auto
+          ?'Autopay. Move '+fmt(b.amt)+' from Bills → Main so it clears.'
+          :'Transfer '+fmt(b.amt)+' from Bills → Main, then pay it.')+
+        ' <b>'+pct+'% saved</b></div>'+
+        '<div class="bar"><i class="'+(pct<80?'low':'')+'" style="width:'+Math.min(100,pct)+'%"></i></div></div>'+
+        '<button class="btn sm" onclick="openPayBill(\''+b.id+'\')">Paid ✓</button></div></div>';
+    }else if(a.kind==='reconcile'){
+      h+='<div class="card action"><div class="row">'+
+        '<div class="grow"><div class="when">Weekly</div>'+
+        '<div class="title">✍️ Enter recent transactions</div>'+
+        '<div class="muted">Log into the bank, enter new charges on the Spend tab, then update the three balances.</div></div>'+
+        '<div style="display:flex;flex-direction:column;gap:6px">'+
+        '<button class="btn sm sec" onclick="TAB=\'spend\';render()">Charges</button>'+
+        '<button class="btn sm" onclick="openBalances(true)">Balances ✓</button></div></div></div>';
+    }
+  }
+  const up=upcomingPreview();
+  if(up.length){
+    h+='<h2 class="section">Coming up · next 30 days</h2>'+
+       '<div class="muted small" style="margin:-4px 4px 8px">Tick any bills to pay them early — one combined transfer.</div>';
+    for(const u of up)
+      h+='<div class="card action upcoming'+(u.kind==='bill'&&SEL.has(u.bill.id)?'" style="opacity:1':'')+'"><div class="row">'+
+         (u.kind==='bill'?checkHTML(u.bill,u.d):'')+
+         '<div class="grow"><div class="when">'+fmtDate(u.d)+'</div><div class="title">'+u.t+
+         (u.kind==='bill'?' <span class="muted small">· '+fundedPct(u.bill)+'% saved</span>':'')+'</div></div></div></div>';
+  }
+  if(SEL.size){
+    h+='<div class="selbar"><div class="grow"><b>'+SEL.size+' bill'+(SEL.size>1?'s':'')+' · '+fmt(selTotal())+'</b>'+
+       '<div class="small">Transfer this from Bills → Main to cover them</div></div>'+
+       '<button class="btn sm sec" onclick="clearSel()">Clear</button>'+
+       '<button class="btn sm" style="background:var(--brand2)" onclick="openBatchPay()">Paid ✓</button></div>';
+  }
+  h+='<h2 class="section">Quick actions</h2><div class="card"><div class="btn-row" style="margin-top:0">'+
+     '<button class="btn ghost" onclick="openExpense()">Log unplanned expense</button>'+
+     '<button class="btn ghost" onclick="openBalances(false)">Edit balances</button></div></div>';
+  return h;
+}
+function viewSpend(){
+  const mk=monthKey();
+  let h='<h2 class="section">Log a charge</h2>';
+  h+='<div class="card">'+
+    '<div class="grid2"><div class="field" style="margin-top:0"><label>Where / what</label>'+
+    '<input id="txWho" placeholder="Bel Air, Costco…"></div>'+
+    '<div class="field" style="margin-top:0"><label>Amount $</label>'+
+    '<input id="txAmt" type="number" step="0.01" inputmode="decimal" placeholder="35"></div></div>'+
+    '<div class="grid2"><div class="field"><label>Comes out of</label><select id="txCat">'+
+    S.cats.map(c=>'<option value="'+c.id+'">'+esc(c.name)+'</option>').join('')+'</select></div>'+
+    '<div class="field"><label>Date</label><input id="txDate" type="date" value="'+todayISO()+'"></div></div>'+
+    '<div class="field"><label>Paid with</label><select id="txHow">'+
+    '<option value="card">Card / Main Checking</option><option value="cash">Cash envelope (don’t touch accounts)</option></select></div>'+
+    '<div class="btn-row"><button class="btn" onclick="addTxn()">Add charge ✓</button></div></div>';
+  h+='<h2 class="section">'+monthLabel()+' budgets</h2><div class="card">'+budgetBarsHTML(false)+'</div>'+
+     '<div class="btn-row"><button class="btn sec" onclick="openCatEditor()">Edit budgets & categories</button></div>';
+  const txs=S.txns.filter(t=>t.d.slice(0,7)===mk);
+  h+='<h2 class="section">'+monthLabel()+' charges ('+txs.length+')</h2>';
+  if(!txs.length)h+='<div class="card empty">No charges logged this month yet.</div>';
+  else{
+    h+='<div class="card">';
+    for(const t of txs){
+      const c=S.cats.find(x=>x.id===t.cat);
+      h+='<div class="hist"><div class="row"><div class="grow">'+esc(t.who||'—')+
+        ' <span class="badge b-info">'+esc(c?c.name:'?')+'</span>'+(t.how==='cash'?' <span class="badge b-opt">cash</span>':'')+
+        '<div class="d">'+fmtDate(t.d)+'</div></div><div class="money">'+fmt2(t.amt)+'</div>'+
+        '<button class="link" onclick="deleteTxn(\''+t.id+'\')" title="Delete">✕</button></div></div>';
+    }
+    h+='</div>';
+  }
+  return h;
+}
+function addTxn(){
+  const who=$('#txWho').value.trim(),amt=+$('#txAmt').value||0;
+  if(!amt){toast('Enter an amount');return}
+  const t={id:'t'+Date.now(),d:$('#txDate').value||todayISO(),who,amt,cat:$('#txCat').value,how:$('#txHow').value};
+  S.txns.unshift(t);
+  if(t.how==='card')S.accounts.main=+(S.accounts.main-amt).toFixed(2);
+  const c=S.cats.find(x=>x.id===t.cat);
+  log('spend',(who||'Charge')+' → '+(c?c.name:''),amt);
+  render();
+  const spent=monthSpent(t.cat);
+  toast(c&&c.monthly?c.name+': '+fmt(spent)+' of '+fmt(c.monthly)+' used':'Charge logged ✓');
+}
+function deleteTxn(id){
+  const t=S.txns.find(x=>x.id===id);if(!t)return;
+  if(!confirm('Remove '+fmt2(t.amt)+(t.who?' at '+t.who:'')+'?'))return;
+  if(t.how==='card')S.accounts.main=+(S.accounts.main+t.amt).toFixed(2);
+  S.txns=S.txns.filter(x=>x.id!==id);
+  render();toast('Charge removed');
+}
+function openCatEditor(){
+  let rows=S.cats.map((c,i)=>'<div class="alloc-line"><input style="flex:1;width:auto;text-align:left;font-weight:400" id="ceN'+i+'" value="'+esc(c.name)+'">'+
+    '<input id="ceB'+i+'" type="number" inputmode="decimal" value="'+c.monthly+'" title="Monthly budget" style="width:80px">'+
+    '<label class="small" style="display:flex;align-items:center;gap:3px;color:var(--muted)"><input type="checkbox" id="ceS'+i+'"'+(c.show?' checked':'')+' style="width:auto">Main</label>'+
+    '<button class="link" onclick="deleteCat('+i+')">✕</button></div>').join('');
+  modal('<h3>Budgets & categories</h3><div class="muted small">Monthly budget for each category ($0 = just track it). “Main” = show on the Today page.</div>'+
+    '<div style="margin-top:8px">'+rows+'</div>'+
+    '<div class="btn-row"><button class="btn ghost" onclick="addCat()">+ Add category</button></div>'+
+    '<div class="btn-row"><button class="btn ghost" onclick="closeModal()">Cancel</button>'+
+    '<button class="btn" onclick="saveCats()">Save ✓</button></div>');
+}
+function addCat(){S.cats.push({id:'c'+Date.now(),name:'New category',monthly:0});openCatEditor()}
+function deleteCat(i){
+  const c=S.cats[i];
+  if(S.txns.some(t=>t.cat===c.id)){toast('Has charges this can’t be deleted — set budget to $0 instead');return}
+  if(!confirm('Delete '+c.name+'?'))return;
+  S.cats.splice(i,1);openCatEditor();
+}
+function saveCats(){
+  S.cats.forEach((c,i)=>{
+    const n=$('#ceN'+i),b=$('#ceB'+i),s=$('#ceS'+i);
+    if(n)c.name=n.value.trim()||c.name;
+    if(b)c.monthly=+b.value||0;
+    if(s)c.show=s.checked;
+  });
+  closeModal();render();toast('Budgets saved ✓');
+}
+function viewAccounts(){
+  const envTot=envelopeTotal(),unalloc=S.accounts.bills-envTot;
+  let h='<h2 class="section">Your accounts</h2>';
+  h+='<div class="card"><div class="muted">Main Checking</div><div class="money big">'+fmt2(S.accounts.main)+'</div>'+
+     '<div class="muted small">Paychecks land here · food & spending stays here</div></div>';
+  h+='<div class="card"><div class="row"><div class="grow"><div class="muted">Bills Savings Checking</div>'+
+     '<div class="money big">'+fmt2(S.accounts.bills)+'</div></div></div>'+
+     '<div class="muted small" style="margin:4px 0 8px">Allocated to bills: <b>'+fmt2(envTot)+'</b> · Unallocated: '+
+     '<b style="color:'+(unalloc<0?'var(--bad)':'inherit')+'">'+fmt2(unalloc)+'</b>'+
+     (unalloc<0?' ⚠️ envelopes claim more than the account holds':'')+'</div>'+
+     (unalloc>=1?'<div class="btn-row" style="margin:0 0 8px"><button class="btn sec sm" onclick="autoFill()">Top up bill funds from unallocated ('+fmt(unalloc)+')</button></div>':'');
+  const sorted=[...S.bills].sort((a,b)=>nextDue(a)<nextDue(b)?-1:1);
+  for(const b of sorted){
+    const pct=fundedPct(b);
+    h+='<div class="env-line"><div class="row"><div class="grow"><span class="title small">'+esc(b.name)+'</span>'+
+       '<span class="muted small"> · due '+fmtDate(nextDue(b))+'</span></div>'+
+       '<div class="money small">'+fmt(b.saved)+' <span class="muted">/ '+fmt(b.amt)+'</span> '+
+       '<b style="color:'+(pct>=100?'var(--good)':pct>=80?'inherit':'var(--warn)')+'">'+pct+'%</b></div></div>'+
+       '<div class="bar"><i class="'+(pct<80?'low':pct>100?'over':'')+'" style="width:'+Math.min(100,pct)+'%"></i></div></div>';
+  }
+  h+='</div>';
+  h+='<div class="card"><div class="muted">Savings</div><div class="money big">'+fmt2(S.accounts.savings)+'</div>'+
+     '<div class="muted small">Long-term savings · extra paychecks go here</div></div>';
+  h+='<div class="btn-row"><button class="btn sec" onclick="openBalances(false)">Edit balances</button></div>';
+  return h;
+}
+function viewBills(){
+  const monthly=S.bills.reduce((t,b)=>t+b.amt*12/b.months/12,0);
+  let h='<h2 class="section">Bills · '+fmt(Math.round(monthly))+'/mo · '+fmt(billsTransferAmt())+' per paycheck</h2>';
+  const sorted=[...S.bills].sort((a,b)=>nextDue(a)<nextDue(b)?-1:1);
+  for(const b of sorted){
+    const freq=b.months===1?'Monthly':b.months===12?'Yearly':'Every '+b.months+' mo';
+    const pri=b.pri==='Essential'?'b-ess':b.pri==='Important'?'b-imp':'b-opt';
+    h+='<div class="card tappable" onclick="openBillForm(\''+b.id+'\')"><div class="row">'+
+      '<div class="grow"><div class="title">'+esc(b.name)+'</div>'+
+      '<div class="muted small">'+esc(b.cat)+' · '+freq+' · due '+fmtDate(nextDue(b))+
+      (b.lastPaid?' · last paid '+fmtDate(b.lastPaid):'')+'</div>'+
+      '<div style="margin-top:4px"><span class="badge '+pri+'">'+esc(b.pri)+'</span> '+
+      (b.auto?'<span class="badge b-auto">Autopay</span> ':'')+
+      '<span class="badge b-info">'+fmt2(weeklyNeed(b))+'/paycheck</span></div></div>'+
+      '<div style="text-align:right"><div class="money">'+fmt(b.amt)+'</div>'+
+      '<div class="muted small">'+fundedPct(b)+'% saved</div></div></div></div>';
+  }
+  return h;
+}
+function viewMore(){
+  let h='<h2 class="section">Unplanned expenses (plan these next year)</h2>';
+  if(!S.expenses.length) h+='<div class="card empty">None logged yet. When life surprises you (school clothes!), log it here so next year it becomes a planned bill.</div>';
+  else{h+='<div class="card">';
+    for(const e of S.expenses)
+      h+='<div class="hist"><div class="row"><div class="grow">'+esc(e.text)+
+         '<div class="d">'+fmtDate(e.d)+'</div></div><div class="money">'+fmt(e.amt)+'</div></div></div>';
+    h+='</div><div class="btn-row"><button class="btn sec" onclick="convertExpense()">Turn one into a bill</button></div>';}
+  h+='<h2 class="section">History</h2>';
+  if(!S.history.length) h+='<div class="card empty">Everything you check off shows up here.</div>';
+  else{h+='<div class="card">';
+    for(const e of S.history.slice(0,60))
+      h+='<div class="hist"><div class="row"><div class="grow">'+esc(e.text)+
+         '<div class="d">'+fmtDate(e.d)+'</div></div>'+(e.amt!=null?'<div class="money">'+fmt(e.amt)+'</div>':'')+'</div></div>';
+    h+='</div>';}
+  h+='<h2 class="section">Backup</h2><div class="card"><div class="muted small" style="margin-bottom:8px">Your data lives only on this device. Export a backup once in a while, or use it to move to another device.</div>'+
+     '<div class="btn-row" style="margin-top:0"><button class="btn sec" onclick="exportData()">Export</button>'+
+     '<button class="btn sec" onclick="importData()">Import</button></div></div>';
+  return h;
+}
+</script>
+<script>
+/* ================= modals ================= */
+function modal(html){$('#modalRoot').innerHTML='<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="sheet">'+html+'</div></div>'}
+function closeModal(){$('#modalRoot').innerHTML=''}
+/* ---- paycheck allocation ---- */
+function openPaycheck(pid){
+  const p=S.people.find(x=>x.id===pid);
+  const bills=Math.round(billsTransferAmt());
+  const cash=S.plan.entCash+S.plan.allowCash;
+  const savings=Math.max(0,Math.round(p.amount-bills-cash-S.plan.food));
+  const extra=isExtraPaycheck(p,p.nextPay);
+  modal('<h3>💵 Allocate '+esc(p.name)+'’s paycheck</h3>'+
+    '<div class="muted small">'+fmtDate(p.nextPay)+' · '+fmt(p.amount)+' landed in Main Checking'+
+    (extra?' · <b style="color:#7a5a12">extra paycheck!</b>':'')+'</div>'+
+    (extra?'<div class="banner gold" style="margin-top:10px"><b>3rd check this month</b>Bills & food are already covered by the first two — consider sending most of this one to Savings.</div>':'')+
+    '<div style="margin-top:8px">'+
+    '<div class="alloc-line"><div class="lbl">→ Bills account<br><span class="muted small">covers this week’s slice of every bill</span></div>'+
+      '<input type="number" id="alBills" value="'+bills+'" step="1" inputmode="decimal" oninput="allocRecalc('+p.amount+')"></div>'+
+    '<div class="alloc-line"><div class="lbl">→ Savings account</div>'+
+      '<input type="number" id="alSav" value="'+savings+'" step="1" inputmode="decimal" oninput="allocRecalc('+p.amount+')"></div>'+
+    '<div class="alloc-line"><div class="lbl">💵 Cash out<br><span class="muted small">$'+S.plan.allowCash+' allowances + $'+S.plan.entCash+' entertainment bag</span></div>'+
+      '<input type="number" id="alCash" value="'+cash+'" step="1" inputmode="decimal" oninput="allocRecalc('+p.amount+')"></div>'+
+    '</div>'+
+    '<div class="stay" id="alStay"></div>'+
+    '<div class="field"><label>Changed the numbers? Why? (optional — gets logged so next year you plan for it)</label>'+
+    '<input type="text" id="alWhy" placeholder="e.g. school clothes $250"></div>'+
+    '<div class="btn-row"><button class="btn ghost" onclick="closeModal()">Cancel</button>'+
+    '<button class="btn" onclick="confirmPaycheck(\''+p.id+'\','+bills+','+savings+')">Done — I made the transfers ✓</button></div>');
+  allocRecalc(p.amount);
+}
+function allocRecalc(amount){
+  const b=+$('#alBills').value||0,s=+$('#alSav').value||0,c=+$('#alCash').value||0;
+  const stay=amount-b-s-c;
+  const el=$('#alStay');
+  el.className='stay'+(stay<0?' neg':'');
+  el.innerHTML='<span>Stays in Main (food '+fmt(S.plan.food)+' + spending)</span><span>'+fmt2(stay)+'</span>'+
+    (stay<0?'<div class="small" style="font-weight:400">That’s more than the paycheck!</div>':'');
+}
+function confirmPaycheck(pid,defBills,defSav){
+  const p=S.people.find(x=>x.id===pid);
+  const b=+$('#alBills').value||0,s=+$('#alSav').value||0,c=+$('#alCash').value||0;
+  const why=$('#alWhy').value.trim();
+  if(p.amount-b-s-c<0&&!confirm('Allocations exceed the paycheck. Continue anyway?'))return;
+  // move money
+  S.accounts.main+=p.amount-b-s-c;
+  S.accounts.bills+=b;
+  S.accounts.savings+=s;
+  // distribute bills transfer across envelopes proportional to weekly need (exact to the cent)
+  const wTot=S.bills.reduce((t,x)=>t+weeklyNeed(x),0)||1;
+  let dist=0;
+  for(const bill of S.bills){const add=+(b*weeklyNeed(bill)/wTot).toFixed(2);bill.saved=+(bill.saved+add).toFixed(2);dist+=add;}
+  const drift=+(b-dist).toFixed(2);
+  if(drift&&S.bills.length){const big=S.bills.reduce((a,x)=>x.amt>a.amt?x:a);big.saved=+(big.saved+drift).toFixed(2);}
+  // log deviations
+  if(why||b!==defBills||s!==defSav){
+    const diff=(defBills-b)+(defSav-s);
+    if(why){S.expenses.unshift({d:todayISO(),text:why,amt:Math.max(diff,0)||Math.abs(diff)});}
+  }
+  log('paycheck',p.name+'’s paycheck allocated · Bills '+fmt(b)+' · Savings '+fmt(s)+' · Cash '+fmt(c),p.amount);
+  p.nextPay=addDays(p.nextPay,14);
+  closeModal();render();toast('Paycheck allocated ✓');
+}
+/* ---- pay a bill ---- */
+function openPayBill(bid){
+  const b=S.bills.find(x=>x.id===bid),d=nextDue(b),pct=fundedPct(b);
+  modal('<h3>'+esc(b.name)+'</h3><div class="muted small">Due '+fmtDate(d)+' · '+pct+'% saved ('+fmt2(b.saved)+' of '+fmt(b.amt)+')</div>'+
+    '<div class="field"><label>Actual amount paid</label>'+
+    '<input type="number" id="pbAmt" value="'+b.amt+'" step="0.01" inputmode="decimal"></div>'+
+    '<div class="muted small" style="margin-top:8px">Checking this off moves the money out of the Bills account'+(b.auto?' (autopay pulls from Main — transfer Bills → Main to cover it)':' (transfer Bills → Main, then pay)')+' and resets the clock for next time.</div>'+
+    (b.months>1||b.amt>=300?'<div class="field"><label><input type="checkbox" id="pbVar" style="width:auto;margin-right:6px">Amount changed — update the bill to this amount going forward</label></div>':'<input type="hidden" id="pbVar">')+
+    '<div class="btn-row"><button class="btn ghost" onclick="closeModal()">Cancel</button>'+
+    '<button class="btn" onclick="confirmPayBill(\''+b.id+'\',\''+d+'\')">Paid ✓</button></div>');
+}
+function confirmPayBill(bid,d){
+  const b=S.bills.find(x=>x.id===bid);
+  const amt=+$('#pbAmt').value||b.amt;
+  const upd=$('#pbVar')&&$('#pbVar').checked;
+  S.accounts.bills=+(S.accounts.bills-amt).toFixed(2);
+  b.saved=Math.max(0,+(b.saved-amt).toFixed(2));
+  b.lastPaid=d; // the due date covered by this payment (may be a few days ahead when paying early)
+  if(upd)b.amt=amt;
+  log('bill','Paid '+b.name,amt);
+  closeModal();render();toast(b.name+' paid ✓');
+}
+/* auto-fill envelopes from unallocated money, soonest-due first */
+function autoFill(){
+  let pool=+(S.accounts.bills-envelopeTotal()).toFixed(2);
+  if(pool<=0){toast('Nothing unallocated to spread');return}
+  const sorted=[...S.bills].sort((a,b)=>nextDue(a)<nextDue(b)?-1:1);
+  for(const b of sorted){
+    if(pool<=0)break;
+    const need=Math.max(0,+(b.amt-b.saved).toFixed(2));
+    const give=Math.min(need,pool);
+    if(give>0){b.saved=+(b.saved+give).toFixed(2);pool=+(pool-give).toFixed(2);}
+  }
+  log('allocate','Topped up bill funds from unallocated money');
+  render();toast('Bill funds topped up, soonest due first ✓');
+}
+/* ---- balances ---- */
+function openBalances(isReconcile){
+  modal('<h3>'+(isReconcile?'✍️ Update balances':'Account balances')+'</h3>'+
+    '<div class="muted small">Enter what the bank actually says right now.</div>'+
+    '<div class="field"><label>Main Checking</label><input type="number" id="balMain" step="0.01" inputmode="decimal" value="'+S.accounts.main+'"></div>'+
+    '<div class="field"><label>Bills Savings Checking</label><input type="number" id="balBills" step="0.01" inputmode="decimal" value="'+S.accounts.bills+'"></div>'+
+    '<div class="field"><label>Savings</label><input type="number" id="balSav" step="0.01" inputmode="decimal" value="'+S.accounts.savings+'"></div>'+
+    '<div class="btn-row"><button class="btn ghost" onclick="closeModal()">Cancel</button>'+
+    '<button class="btn" onclick="confirmBalances('+(isReconcile?'true':'false')+')">Save ✓</button></div>');
+}
+function confirmBalances(isReconcile){
+  S.accounts.main=+$('#balMain').value||0;
+  S.accounts.bills=+$('#balBills').value||0;
+  S.accounts.savings=+$('#balSav').value||0;
+  if(isReconcile){S.lastReconcile=todayISO();log('reconcile','Balances updated from bank');}
+  closeModal();render();toast('Balances saved ✓');
+}
+/* ---- bill add/edit ---- */
+function openBillForm(bid){
+  const b=bid?S.bills.find(x=>x.id===bid):{name:'',cat:'Utilities',amt:0,months:1,dueDay:15,auto:false,pri:'Important',notes:'',saved:0,lastPaid:null};
+  const cats=['Housing','Utilities','Insurance','Subscription','Credit','Transportation','Sports','Home','Medical','Other'];
+  const freqs=[[1,'Monthly'],[2,'Every 2 months'],[3,'Every 3 months'],[6,'Every 6 months'],[12,'Yearly']];
+  modal('<h3>'+(bid?'Edit bill':'New bill')+'</h3>'+
+    '<div class="field"><label>Name</label><input id="bfName" value="'+esc(b.name)+'"></div>'+
+    '<div class="grid2"><div class="field"><label>Amount per bill</label><input id="bfAmt" type="number" step="0.01" inputmode="decimal" value="'+b.amt+'"></div>'+
+    '<div class="field"><label>How often</label><select id="bfFreq">'+freqs.map(f=>'<option value="'+f[0]+'"'+(f[0]===b.months?' selected':'')+'>'+f[1]+'</option>').join('')+'</select></div></div>'+
+    '<div class="grid2"><div class="field"><label>Day of month due</label><input id="bfDue" type="number" min="1" max="31" inputmode="numeric" value="'+(b.dueDay||15)+'"></div>'+
+    '<div class="field"><label>Last time paid</label><input id="bfLast" type="date" value="'+(b.lastPaid||'')+'"></div></div>'+
+    '<div class="grid2"><div class="field"><label>Category</label><select id="bfCat">'+cats.map(c=>'<option'+(c===b.cat?' selected':'')+'>'+c+'</option>').join('')+'</select></div>'+
+    '<div class="field"><label>Priority</label><select id="bfPri">'+['Essential','Important','Optional'].map(c=>'<option'+(c===b.pri?' selected':'')+'>'+c+'</option>').join('')+'</select></div></div>'+
+    '<div class="grid2"><div class="field"><label>Autopay?</label><select id="bfAuto"><option value="no"'+(!b.auto?' selected':'')+'>No — I pay it</option><option value="yes"'+(b.auto?' selected':'')+'>Yes — automatic</option></select></div>'+
+    '<div class="field"><label>Saved so far ($)</label><input id="bfSaved" type="number" step="0.01" inputmode="decimal" value="'+b.saved+'"></div></div>'+
+    '<div class="field"><label>Notes</label><input id="bfNotes" value="'+esc(b.notes||'')+'"></div>'+
+    '<div class="btn-row">'+(bid?'<button class="btn danger" onclick="deleteBill(\''+bid+'\')">Delete</button>':'')+
+    '<button class="btn ghost" onclick="closeModal()">Cancel</button>'+
+    '<button class="btn" onclick="saveBill(\''+(bid||'')+'\')">Save ✓</button></div>');
+}
+function saveBill(bid){
+  const name=$('#bfName').value.trim();if(!name){toast('Give the bill a name');return}
+  const data={name,cat:$('#bfCat').value,amt:+$('#bfAmt').value||0,months:+$('#bfFreq').value,
+    dueDay:Math.min(31,Math.max(1,+$('#bfDue').value||15)),auto:$('#bfAuto').value==='yes',
+    pri:$('#bfPri').value,notes:$('#bfNotes').value,saved:+$('#bfSaved').value||0,
+    lastPaid:$('#bfLast').value||null};
+  if(bid){Object.assign(S.bills.find(x=>x.id===bid),data);}
+  else{S.bills.push(Object.assign({id:'b'+Date.now()},data));log('bill','Added bill: '+name,data.amt);}
+  closeModal();render();toast('Saved ✓');
+}
+function deleteBill(bid){
+  const b=S.bills.find(x=>x.id===bid);
+  if(!confirm('Delete '+b.name+'?'))return;
+  S.bills=S.bills.filter(x=>x.id!==bid);
+  log('bill','Removed bill: '+b.name);
+  closeModal();render();
+}
+/* ---- unplanned expense ---- */
+function openExpense(){
+  modal('<h3>Log an unplanned expense</h3>'+
+    '<div class="muted small">Something came up that wasn’t in the plan. Log it — the list under “More” is your shopping list of new bills to plan for next year.</div>'+
+    '<div class="field"><label>What was it?</label><input id="exText" placeholder="School clothes"></div>'+
+    '<div class="field"><label>How much?</label><input id="exAmt" type="number" step="0.01" inputmode="decimal"></div>'+
+    '<div class="field"><label>Which account did it come out of?</label><select id="exAcct"><option value="main">Main Checking</option><option value="savings">Savings</option><option value="bills">Bills account</option><option value="none">Cash / don’t adjust</option></select></div>'+
+    '<div class="btn-row"><button class="btn ghost" onclick="closeModal()">Cancel</button>'+
+    '<button class="btn" onclick="confirmExpense()">Log it ✓</button></div>');
+}
+function confirmExpense(){
+  const t=$('#exText').value.trim(),a=+$('#exAmt').value||0,acct=$('#exAcct').value;
+  if(!t){toast('Describe the expense');return}
+  S.expenses.unshift({d:todayISO(),text:t,amt:a});
+  if(acct!=='none'&&a){S.accounts[acct]=+(S.accounts[acct]-a).toFixed(2);}
+  log('expense','Unplanned: '+t,a);
+  closeModal();render();toast('Logged — plan for it next year');
+}
+function convertExpense(){
+  if(!S.expenses.length)return;
+  const e=S.expenses[0];
+  openBillForm(null);
+  setTimeout(()=>{$('#bfName').value=e.text;$('#bfAmt').value=e.amt;$('#bfFreq').value=12;},50);
+}
+/* ---- settings ---- */
+function openSettings(){
+  const p1=S.people[0],p2=S.people[1];
+  modal('<h3>⚙︎ Settings</h3>'+
+    '<h2 class="section" style="margin-top:14px">Paychecks</h2>'+
+    '<div class="grid2"><div class="field"><label>'+esc(p1.name)+' take-home</label><input id="stA1" type="number" inputmode="decimal" value="'+p1.amount+'"></div>'+
+    '<div class="field"><label>Next payday</label><input id="stD1" type="date" value="'+(p1.nextPay||'')+'"></div></div>'+
+    '<div class="grid2"><div class="field"><label>'+esc(p2.name)+' take-home</label><input id="stA2" type="number" inputmode="decimal" value="'+p2.amount+'"></div>'+
+    '<div class="field"><label>Next payday</label><input id="stD2" type="date" value="'+(p2.nextPay||'')+'"></div></div>'+
+    '<h2 class="section">Per-paycheck plan</h2>'+
+    '<div class="grid2"><div class="field"><label>Food (stays in Main)</label><input id="stFood" type="number" inputmode="decimal" value="'+S.plan.food+'"></div>'+
+    '<div class="field"><label>Entertainment cash</label><input id="stEnt" type="number" inputmode="decimal" value="'+S.plan.entCash+'"></div></div>'+
+    '<div class="grid2"><div class="field"><label>Allowance cash</label><input id="stAllow" type="number" inputmode="decimal" value="'+S.plan.allowCash+'"></div>'+
+    '<div class="field"><label>Bills transfer</label><select id="stMode"><option value="auto"'+(S.plan.billsMode==='auto'?' selected':'')+'>Auto — computed from bills ('+fmt(suggestedBills())+')</option><option value="fixed"'+(S.plan.billsMode==='fixed'?' selected':'')+'>Fixed amount</option></select></div></div>'+
+    '<div class="field" id="stFixedWrap" style="display:'+(S.plan.billsMode==='fixed'?'block':'none')+'"><label>Fixed bills transfer $</label><input id="stFixed" type="number" inputmode="decimal" value="'+S.plan.billsFixed+'"></div>'+
+    '<h2 class="section">Sync between devices</h2>'+
+    '<div class="muted small">Keeps phone & computer on the same data via a private GitHub repository you own. '+
+    (syncReady()?'<b style="color:var(--good)">Connected to '+esc(SYNC.repo)+'</b>':'Not connected.')+'</div>'+
+    '<div class="field"><label>Repository (username/repo-name)</label><input id="syRepo" placeholder="bradc/budget-data" value="'+esc(SYNC.repo)+'"></div>'+
+    '<div class="field"><label>Access token</label><input id="syTok" type="password" placeholder="github_pat_…" value="'+esc(SYNC.token)+'"></div>'+
+    '<div class="btn-row"><button class="btn sec" onclick="saveSyncCfg()">'+(syncReady()?'Update & sync now':'Connect & sync now')+'</button>'+
+    (syncReady()?'<button class="btn danger" onclick="SYNC.on=false;SYNC.token=\'\';syncSaveCfg();syncStat(\'\');closeModal();toast(\'Sync disconnected on this device\')">Disconnect</button>':'')+'</div>'+
+    '<div class="btn-row"><button class="btn ghost" onclick="closeModal()">Cancel</button>'+
+    '<button class="btn" onclick="saveSettings()">Save ✓</button></div>');
+  $('#stMode').onchange=()=>{$('#stFixedWrap').style.display=$('#stMode').value==='fixed'?'block':'none'};
+}
+function saveSettings(){
+  S.people[0].amount=+$('#stA1').value||0; S.people[0].nextPay=$('#stD1').value||S.people[0].nextPay;
+  S.people[1].amount=+$('#stA2').value||0; S.people[1].nextPay=$('#stD2').value||S.people[1].nextPay;
+  S.plan.food=+$('#stFood').value||0; S.plan.entCash=+$('#stEnt').value||0; S.plan.allowCash=+$('#stAllow').value||0;
+  S.plan.billsMode=$('#stMode').value; S.plan.billsFixed=+$('#stFixed').value||S.plan.billsFixed;
+  const sr=$('#syRepo'),st=$('#syTok');
+  if(sr&&st){
+    const nr=sr.value.trim().replace(/^https?:\/\/github\.com\//,'').replace(/\/$/,''),nt=st.value.trim();
+    if(nr!==SYNC.repo||nt!==SYNC.token){
+      SYNC.repo=nr;SYNC.token=nt;SYNC.on=!!(nr&&nt);SYNC.sha=null;syncSaveCfg();
+      if(SYNC.on)syncNow(true);else syncStat('');
+    }
+  }
+  closeModal();render();toast('Settings saved ✓');
+}
+/* ---- backup ---- */
+function exportData(){
+  const blob=new Blob([JSON.stringify(S,null,1)],{type:'application/json'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);
+  a.download='family-budget-backup-'+todayISO()+'.json';a.click();
+}
+function importData(){
+  const inp=document.createElement('input');inp.type='file';inp.accept='.json,application/json';
+  inp.onchange=()=>{const f=inp.files[0];if(!f)return;const r=new FileReader();
+    r.onload=()=>{try{const d=JSON.parse(r.result);if(!d.bills||!d.accounts)throw 0;S=d;saveState();render();toast('Backup restored ✓');}
+      catch(e){toast('That file doesn’t look like a backup')}};r.readAsText(f);};
+  inp.click();
+}
+/* ================= cross-device sync (GitHub private repo) ================= */
+const SKEY='familyBudget.sync';
+let SYNC={on:false,repo:'',token:'',sha:null};
+try{const s=localStorage.getItem(SKEY);if(s)SYNC=Object.assign(SYNC,JSON.parse(s));}catch(e){}
+function syncSaveCfg(){try{localStorage.setItem(SKEY,JSON.stringify(SYNC));}catch(e){}}
+function syncReady(){return SYNC.on&&SYNC.repo&&SYNC.token}
+function syncUrl(){return 'https://api.github.com/repos/'+SYNC.repo.trim()+'/contents/budget-data.json'}
+function ghHeaders(){return {'Authorization':'Bearer '+SYNC.token.trim(),'Accept':'application/vnd.github+json'}}
+function b64enc(s){return btoa(unescape(encodeURIComponent(s)))}
+function b64dec(s){return decodeURIComponent(escape(atob(s.replace(/\s/g,''))))}
+function syncStat(t,color){
+  const el=$('#syncStat');if(!el)return;
+  if(!t){el.style.display='none';return}
+  el.style.display='inline';el.textContent=t;el.style.color=color||'#fff';
+}
+async function syncPull(interactive){
+  if(!syncReady())return 'off';
+  syncStat('⟳');
+  const r=await fetch(syncUrl(),{headers:ghHeaders(),cache:'no-store'});
+  if(r.status===404){SYNC.sha=null;syncSaveCfg();return 'none'}
+  if(!r.ok)throw new Error('GitHub said '+r.status);
+  const j=await r.json();
+  SYNC.sha=j.sha;syncSaveCfg();
+  let remote=null;
+  try{remote=JSON.parse(b64dec(j.content));}catch(e){throw new Error('cloud data unreadable')}
+  if(remote&&(remote.ts||0)>(S.ts||0)){
+    // first-time connect on a device that already has its own data: let the user pick which copy survives
+    if(interactive&&S.setupDone){
+      const useCloud=confirm('The cloud already has budget data.\n\nOK = use the CLOUD copy (replaces what is on this device)\nCancel = keep THIS DEVICE’s data (it becomes the cloud copy)');
+      if(!useCloud){S.ts=Date.now();saveState();return 'local'}
+    }
+    S=remote;lastSerial=null;saveState();
+    return 'remote';
+  }
+  return 'local';
+}
+let pushTimer=null,pushing=false;
+function scheduleSyncPush(){
+  if(!syncReady())return;
+  clearTimeout(pushTimer);
+  pushTimer=setTimeout(()=>syncPush().catch(e=>syncStat('⚠ sync','#ffd7a8')),1500);
+}
+async function syncPush(retry){
+  if(!syncReady()||pushing)return;
+  pushing=true;syncStat('⟳');
+  try{
+    const body={message:'Family Budget sync',content:b64enc(JSON.stringify(S))};
+    if(SYNC.sha)body.sha=SYNC.sha;
+    const r=await fetch(syncUrl(),{method:'PUT',headers:ghHeaders(),body:JSON.stringify(body)});
+    if((r.status===409||r.status===422)&&!retry){
+      pushing=false;
+      const res=await syncPull(); // someone else pushed first — take newest, then retry once if we still win
+      if(res==='local')return syncPush(true);
+      if(res==='remote'){render();toast('Pulled newer data from your other device');}
+      return;
+    }
+    if(!r.ok)throw new Error('GitHub said '+r.status);
+    const j=await r.json();
+    SYNC.sha=j.content.sha;syncSaveCfg();
+    syncStat('✓ synced','#bfe3d2');
+  }finally{pushing=false;}
+}
+async function syncNow(fromSettings){
+  try{
+    const res=await syncPull(fromSettings===true);
+    if(res==='remote'){
+      if(S.setupDone)closeModal(); // a fresh device just received real data — no need for the setup wizard
+      render();toast('Latest data pulled from the cloud ✓');
+    }
+    else if(res==='local'||res==='none'){await syncPush();toast('Your data is now in the cloud ✓');}
+    syncStat('✓ synced','#bfe3d2');
+    return true;
+  }catch(e){
+    syncStat('⚠ sync','#ffd7a8');
+    toast('Sync problem: '+e.message);
+    return false;
+  }
+}
+function saveSyncCfg(){
+  SYNC.repo=$('#syRepo').value.trim().replace(/^https?:\/\/github\.com\//,'').replace(/\/$/,'');
+  SYNC.token=$('#syTok').value.trim();
+  SYNC.on=!!(SYNC.repo&&SYNC.token);
+  SYNC.sha=null;
+  syncSaveCfg();
+  if(SYNC.on){syncNow(true);}else{syncStat('');toast('Sync turned off');}
+  closeModal();
+}
+/* ================= first-run setup ================= */
+function openSetup(){
+  const friday=nextDow(5),saturday=nextDow(6);
+  modal('<div class="setup-step on" id="ss1">'+
+    '<h3>👋 Welcome to Family Budget</h3>'+
+    '<p class="muted" style="margin-top:6px;line-height:1.5">The system: every paycheck, the app tells you exactly how much to move to your <b>Bills account</b> and <b>Savings</b>, and how much cash to pull. Every bill quietly saves up its own share week by week, so when it’s due the money is already there. No feast or famine.</p>'+
+    '<div class="dots"><i class="on"></i><i></i><i></i></div>'+
+    '<div class="btn-row"><button class="btn" onclick="setupStep(2)">Set up fresh →</button></div>'+
+    '<div class="btn-row"><button class="btn ghost" onclick="openCloudConnect()">☁️ I already use this app — connect my data</button></div></div>'+
+    '<div class="setup-step" id="ss2">'+
+    '<h3>🏦 What’s in the accounts right now?</h3>'+
+    '<div class="muted small">Open your banking app and copy the balances. Rough numbers are fine — you can fix them anytime.</div>'+
+    '<div class="field"><label>Main Checking</label><input id="suMain" type="number" step="0.01" inputmode="decimal" placeholder="0"></div>'+
+    '<div class="field"><label>Bills Savings Checking</label><input id="suBills" type="number" step="0.01" inputmode="decimal" placeholder="0"></div>'+
+    '<div class="field"><label>Savings</label><input id="suSav" type="number" step="0.01" inputmode="decimal" placeholder="0"></div>'+
+    '<div class="dots"><i></i><i class="on"></i><i></i></div>'+
+    '<div class="btn-row"><button class="btn ghost" onclick="setupStep(1)">Back</button><button class="btn" onclick="setupStep(3)">Next →</button></div></div>'+
+    '<div class="setup-step" id="ss3">'+
+    '<h3>💵 Who gets paid, how much, and when next?</h3>'+
+    '<div class="muted small">Paychecks alternate every two weeks — enter each person’s next payday.</div>'+
+    '<div class="grid2"><div class="field"><label>Name</label><input id="suN1" value="'+esc(S.people[0].name)+'"></div>'+
+    '<div class="field"><label>Take-home per check</label><input id="suA1" type="number" inputmode="decimal" placeholder="0"></div></div>'+
+    '<div class="field"><label>Their next payday</label><input id="suD1" type="date" value="'+friday+'"></div>'+
+    '<div class="grid2"><div class="field"><label>Name</label><input id="suN2" value="'+esc(S.people[1].name)+'"></div>'+
+    '<div class="field"><label>Take-home per check</label><input id="suA2" type="number" inputmode="decimal" placeholder="0"></div></div>'+
+    '<div class="field"><label>Their next payday</label><input id="suD2" type="date" value="'+saturday+'"></div>'+
+    '<div class="dots"><i></i><i></i><i class="on"></i></div>'+
+    '<div class="btn-row"><button class="btn ghost" onclick="setupStep(2)">Back</button><button class="btn" onclick="finishSetup()">Finish ✓</button></div></div>');
+}
+function setupStep(n){document.querySelectorAll('.setup-step').forEach((el,i)=>el.classList.toggle('on',i===n-1))}
+function finishSetup(){
+  S.accounts.main=+$('#suMain').value||0;
+  S.accounts.bills=+$('#suBills').value||0;
+  S.accounts.savings=+$('#suSav').value||0;
+  S.people[0].name=$('#suN1').value.trim()||S.people[0].name;
+  S.people[1].name=$('#suN2').value.trim()||S.people[1].name;
+  S.people[0].amount=+$('#suA1').value||0;
+  S.people[1].amount=+$('#suA2').value||0;
+  S.people[0].nextPay=$('#suD1').value||nextDow(5);
+  S.people[1].nextPay=$('#suD2').value||nextDow(6);
+  S.setupDone=true;S.lastReconcile=todayISO();
+  log('setup','Budget set up');
+  closeModal();render();toast('You’re all set 🎉 Add your bills on the Bills tab.');
+}
+function openCloudConnect(){
+  modal('<h3>☁️ Connect your data</h3>'+
+    '<div class="muted small">Enter the same private repository and access token you used before — your whole budget will appear.</div>'+
+    '<div class="field"><label>Repository (username/repo-name)</label><input id="ccRepo" placeholder="yourname/budget-data" value="'+esc(SYNC.repo)+'"></div>'+
+    '<div class="field"><label>Access token</label><input id="ccTok" type="password" placeholder="github_pat_…"></div>'+
+    '<div class="btn-row"><button class="btn ghost" onclick="closeModal();openSetup()">Back</button>'+
+    '<button class="btn" onclick="cloudConnect()">Connect ✓</button></div>');
+}
+async function cloudConnect(){
+  SYNC.repo=$('#ccRepo').value.trim().replace(/^https?:\/\/github\.com\//,'').replace(/\/$/,'');
+  SYNC.token=$('#ccTok').value.trim();
+  SYNC.on=!!(SYNC.repo&&SYNC.token);SYNC.sha=null;syncSaveCfg();
+  if(!SYNC.on){toast('Fill in both fields');return}
+  const ok=await syncNow(false);
+  if(ok&&!S.setupDone){toast('Connected, but no budget data in that repository yet');openSetup();}
+}
+/* ================= boot ================= */
+document.querySelectorAll('nav.tabs button').forEach(b=>b.onclick=()=>{TAB=b.dataset.tab;render()});
+$('#gearBtn').onclick=openSettings;
+$('#fab').onclick=()=>openBillForm(null);
+render();
+if(!S.setupDone)openSetup();
+if(syncReady()){
+  syncNow(false);
+  // pull again whenever the app comes back to the foreground (e.g. reopening on the phone)
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden)syncNow(false)});
+}
+</script>
+</body>
+</html>
