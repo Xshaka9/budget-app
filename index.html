@@ -204,6 +204,15 @@ if(!S.v||S.v<2){
   if(gi>-1)S.bills.splice(gi,1); // gas is now a spending category; its saved money returns to unallocated
   S.v=2;
 }
+if(S.v<3){
+  if(!S.pending)S.pending=[]; // money moved to Main for bills, waiting for the payment to actually come out
+  if(!S.earmarks){
+    S.earmarks={};
+    if(S.cats.some(c=>c.id==='c-food'))S.earmarks['c-food']=0;
+    if(S.cats.some(c=>c.id==='c-gas'))S.earmarks['c-gas']=0;
+  }
+  S.v=3;
+}
 /* ================= helpers ================= */
 const $=q=>document.querySelector(q);
 const fmt=n=>(n<0?'-':'')+'$'+Math.abs(n).toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0});
@@ -240,6 +249,14 @@ function nextDue(b){
 }
 function fundedPct(b){return b.amt<=0?100:Math.min(999,Math.round(b.saved/b.amt*100))}
 function envelopeTotal(){return S.bills.reduce((t,b)=>t+b.saved,0)}
+function pendingTotal(){return (S.pending||[]).reduce((t,p)=>t+p.amt,0)}
+function earmarkTotal(){return Object.values(S.earmarks||{}).reduce((t,v)=>t+v,0)}
+function mainExtra(){return +(S.accounts.main-pendingTotal()-earmarkTotal()).toFixed(2)}
+/* how much gets reserved in Main for a category each paycheck */
+function perCheckReserve(c){
+  if(c.id==='c-food'&&S.plan.food)return S.plan.food;
+  return +(c.monthly*12/52).toFixed(2);
+}
 /* paydays of a person within the calendar month of dateISO */
 function paydaysInMonth(p,dateISO){
   if(!p.nextPay) return [];
@@ -343,13 +360,35 @@ function confirmBatchPay(){
   for(const [id,due] of SEL){
     const b=S.bills.find(x=>x.id===id);if(!b)continue;
     S.accounts.bills=+(S.accounts.bills-b.amt).toFixed(2);
+    S.accounts.main=+(S.accounts.main+b.amt).toFixed(2);
+    S.pending.push({id:'pd'+Date.now()+Math.floor(Math.random()*100000),billId:b.id,name:b.name,amt:b.amt,d:todayISO()});
     b.saved=Math.max(0,+(b.saved-b.amt).toFixed(2));
     b.lastPaid=due; // due date being covered, so the next cycle computes correctly even when paying early
     total+=b.amt;names.push(b.name);
   }
-  log('bill','Paid '+names.length+' bills ('+names.join(', ')+')',total);
+  log('bill','Paid '+names.length+' bills ('+names.join(', ')+') — '+fmt(total)+' moved to Main, waiting to clear',total);
   SEL.clear();closeModal();render();
-  toast('Marked paid — transfer '+fmt(total)+' from Bills → Main');
+  toast(fmt(total)+' now in Main — tap Cleared on each as they come out');
+}
+function clearPending(pid){
+  const p=S.pending.find(x=>x.id===pid);if(!p)return;
+  S.accounts.main=+(S.accounts.main-p.amt).toFixed(2);
+  S.pending=S.pending.filter(x=>x.id!==pid);
+  log('bill',p.name+' cleared the bank',p.amt);
+  render();toast(p.name+' cleared ✓');
+}
+function rebalanceAll(){
+  if(!confirm('Re-balance ALL bill funds?\n\nThis wipes the current per-bill amounts and re-spreads the whole Bills account so every bill sits exactly where its schedule says it should.'))return;
+  S.bills.forEach(b=>b.saved=0);
+  autoFill();
+}
+function openEarmarkEdit(cid){
+  const c=S.cats.find(x=>x.id===cid);if(!c)return;
+  modal('<h3>'+esc(c.name)+' money in Main</h3>'+
+    '<div class="muted small">This is how much of Main Checking is set aside for '+esc(c.name)+' right now. It grows each paycheck and shrinks as you log charges. Adjust it if it’s drifted from reality.</div>'+
+    '<div class="field"><label>Amount set aside ($)</label><input id="emAmt" type="number" step="0.01" inputmode="decimal" value="'+(S.earmarks[cid]||0)+'"></div>'+
+    '<div class="btn-row"><button class="btn ghost" onclick="closeModal()">Cancel</button>'+
+    '<button class="btn" onclick="S.earmarks[\''+cid+'\']=Math.max(0,+document.querySelector(\'#emAmt\').value||0);closeModal();render();toast(\'Updated ✓\')">Save ✓</button></div>');
 }
 /* ================= spending budgets ================= */
 function monthKey(){return todayISO().slice(0,7)}
@@ -363,6 +402,15 @@ function budgetBarsHTML(compact){
   for(const c of S.cats){
     const spent=monthSpent(c.id);
     if(compact&&!c.show)continue;
+    // categories with money set aside in Main show as a countdown of real dollars
+    if(compact&&S.earmarks&&S.earmarks[c.id]!==undefined){
+      const left=S.earmarks[c.id]||0;
+      const res=perCheckReserve(c);
+      h+='<div class="env-line"><div class="row"><div class="grow"><span class="title small">'+esc(c.name)+'</span>'+
+        '<div class="muted small">+'+fmt(res)+' each paycheck</div></div>'+
+        '<div class="money" style="color:'+(left<=0?'var(--bad)':left<res*.25?'var(--warn)':'var(--good)')+'">'+fmt2(left)+' left</div></div></div>';
+      continue;
+    }
     const pct=c.monthly>0?Math.round(spent/c.monthly*100):0;
     const left=c.monthly-spent;
     const col=c.monthly>0?(pct>100?'var(--bad)':pct>=80?'var(--warn)':'var(--good)'):'var(--muted)';
@@ -448,9 +496,10 @@ function viewToday(){
        '<button class="btn sm sec" onclick="clearSel()">Clear</button>'+
        '<button class="btn sm" style="background:var(--brand2)" onclick="openBatchPay()">Paid ✓</button></div>';
   }
-  h+='<h2 class="section">Quick actions</h2><div class="card"><div class="btn-row" style="margin-top:0">'+
-     '<button class="btn ghost" onclick="openExpense()">Log unplanned expense</button>'+
-     '<button class="btn ghost" onclick="openBalances(false)">Edit balances</button></div></div>';
+  h+='<h2 class="section">Quick actions</h2><div class="card">'+
+     '<div class="btn-row" style="margin-top:0"><button class="btn ghost" onclick="openIncome()">💰 Add money</button>'+
+     '<button class="btn ghost" onclick="openExpense()">Log unplanned expense</button></div>'+
+     '<div class="btn-row"><button class="btn ghost" onclick="openBalances(false)">Edit balances</button></div></div>';
   return h;
 }
 function viewSpend(){
@@ -490,7 +539,10 @@ function addTxn(){
   if(!amt){toast('Enter an amount');return}
   const t={id:'t'+Date.now(),d:$('#txDate').value||todayISO(),who,amt,cat:$('#txCat').value,how:$('#txHow').value};
   S.txns.unshift(t);
-  if(t.how==='card')S.accounts.main=+(S.accounts.main-amt).toFixed(2);
+  if(t.how==='card'){
+    S.accounts.main=+(S.accounts.main-amt).toFixed(2);
+    if(S.earmarks[t.cat]!==undefined)S.earmarks[t.cat]=Math.max(0,+(S.earmarks[t.cat]-amt).toFixed(2));
+  }
   const c=S.cats.find(x=>x.id===t.cat);
   log('spend',(who||'Charge')+' → '+(c?c.name:''),amt);
   render();
@@ -500,7 +552,10 @@ function addTxn(){
 function deleteTxn(id){
   const t=S.txns.find(x=>x.id===id);if(!t)return;
   if(!confirm('Remove '+fmt2(t.amt)+(t.who?' at '+t.who:'')+'?'))return;
-  if(t.how==='card')S.accounts.main=+(S.accounts.main+t.amt).toFixed(2);
+  if(t.how==='card'){
+    S.accounts.main=+(S.accounts.main+t.amt).toFixed(2);
+    if(S.earmarks[t.cat]!==undefined)S.earmarks[t.cat]=+(S.earmarks[t.cat]+t.amt).toFixed(2);
+  }
   S.txns=S.txns.filter(x=>x.id!==id);
   render();toast('Charge removed');
 }
@@ -535,7 +590,27 @@ function viewAccounts(){
   const envTot=envelopeTotal(),unalloc=S.accounts.bills-envTot;
   let h='<h2 class="section">Your accounts</h2>';
   h+='<div class="card"><div class="muted">Main Checking</div><div class="money big">'+fmt2(S.accounts.main)+'</div>'+
-     '<div class="muted small">Paychecks land here · food & spending stays here</div></div>';
+     '<div class="muted small">Paychecks land here · food & spending stays here</div>';
+  if((S.pending||[]).length){
+    h+='<div class="muted small" style="margin-top:8px;font-weight:700;text-transform:uppercase;letter-spacing:.05em">Waiting to clear</div>';
+    for(const p of S.pending)
+      h+='<div class="env-line"><div class="row"><div class="grow"><span class="title small">'+esc(p.name)+'</span>'+
+         '<span class="muted small"> · moved in '+fmtDate(p.d)+'</span></div>'+
+         '<div class="money small">'+fmt2(p.amt)+'</div>'+
+         '<button class="btn sm sec" onclick="clearPending(\''+p.id+'\')">Cleared ✓</button></div></div>';
+  }
+  const emCats=Object.keys(S.earmarks||{}).map(id=>S.cats.find(c=>c.id===id)).filter(Boolean);
+  if(emCats.length){
+    h+='<div class="muted small" style="margin-top:8px;font-weight:700;text-transform:uppercase;letter-spacing:.05em">Set aside · shrinks as you log charges</div>';
+    for(const c of emCats)
+      h+='<div class="env-line" style="cursor:pointer" onclick="openEarmarkEdit(\''+c.id+'\')"><div class="row">'+
+         '<div class="grow"><span class="title small">'+esc(c.name)+'</span></div>'+
+         '<div class="money small">'+fmt2(S.earmarks[c.id]||0)+'</div></div></div>';
+  }
+  const extra=mainExtra();
+  h+='<div class="stay'+(extra<0?' neg':'')+'" style="margin-top:10px"><span>Extra — not spoken for</span><span>'+fmt2(extra)+'</span>'+
+     (extra<0?'<div class="small" style="font-weight:400">Main is short of what it’s supposed to be covering</div>':'')+'</div>';
+  h+='</div>';
   h+='<div class="card"><div class="row"><div class="grow"><div class="muted">Bills Savings Checking</div>'+
      '<div class="money big">'+fmt2(S.accounts.bills)+'</div></div></div>'+
      '<div class="muted small" style="margin:4px 0 8px">Allocated to bills: <b>'+fmt2(envTot)+'</b> · Unallocated: '+
@@ -554,7 +629,8 @@ function viewAccounts(){
   h+='</div>';
   h+='<div class="card"><div class="muted">Savings</div><div class="money big">'+fmt2(S.accounts.savings)+'</div>'+
      '<div class="muted small">Long-term savings · extra paychecks go here</div></div>';
-  h+='<div class="btn-row"><button class="btn sec" onclick="openBalances(false)">Edit balances</button></div>';
+  h+='<div class="btn-row"><button class="btn sec" onclick="openBalances(false)">Edit balances</button>'+
+     '<button class="btn ghost" onclick="rebalanceAll()">Re-balance all funds</button></div>';
   return h;
 }
 function viewBills(){
@@ -655,6 +731,11 @@ function confirmPaycheck(pid,defBills,defSav){
     const diff=(defBills-b)+(defSav-s);
     if(why){S.expenses.unshift({d:todayISO(),text:why,amt:Math.max(diff,0)||Math.abs(diff)});}
   }
+  // reserve this check's food & gas money inside Main
+  for(const cid of Object.keys(S.earmarks||{})){
+    const cat=S.cats.find(x=>x.id===cid);
+    if(cat)S.earmarks[cid]=+(S.earmarks[cid]+perCheckReserve(cat)).toFixed(2);
+  }
   log('paycheck',p.name+'’s paycheck allocated · Bills '+fmt(b)+' · Savings '+fmt(s)+' · Cash '+fmt(c),p.amount);
   p.nextPay=addDays(p.nextPay,14);
   closeModal();render();toast('Paycheck allocated ✓');
@@ -675,11 +756,13 @@ function confirmPayBill(bid,d){
   const amt=+$('#pbAmt').value||b.amt;
   const upd=$('#pbVar')&&$('#pbVar').checked;
   S.accounts.bills=+(S.accounts.bills-amt).toFixed(2);
+  S.accounts.main=+(S.accounts.main+amt).toFixed(2); // the transfer lands in Main until the payment clears
+  S.pending.push({id:'pd'+Date.now()+Math.floor(Math.random()*1000),billId:b.id,name:b.name,amt,d:todayISO()});
   b.saved=Math.max(0,+(b.saved-amt).toFixed(2));
   b.lastPaid=d; // the due date covered by this payment (may be a few days ahead when paying early)
   if(upd)b.amt=amt;
-  log('bill','Paid '+b.name,amt);
-  closeModal();render();toast(b.name+' paid ✓');
+  log('bill','Paid '+b.name+' — '+fmt(amt)+' moved to Main, waiting to clear',amt);
+  closeModal();render();toast(b.name+': money in Main — tap Cleared when it comes out');
 }
 /* how far through its own cycle is this bill? 0 = just paid, 1 = due now */
 function cycleFrac(b){
@@ -759,6 +842,27 @@ function deleteBill(bid){
   S.bills=S.bills.filter(x=>x.id!==bid);
   log('bill','Removed bill: '+b.name);
   closeModal();render();
+}
+/* ---- extra income (bonus, tax return, winnings…) ---- */
+function openIncome(){
+  modal('<h3>💰 Add money</h3>'+
+    '<div class="muted small">A bonus, tax return, gift, winnings — money that arrived outside the normal paychecks.</div>'+
+    '<div class="field"><label>What is it?</label><input id="inWhat" placeholder="Tax return"></div>'+
+    '<div class="field"><label>How much?</label><input id="inAmt" type="number" step="0.01" inputmode="decimal"></div>'+
+    '<div class="field"><label>Where did you put it?</label><select id="inAcct">'+
+    '<option value="savings">Savings</option>'+
+    '<option value="main">Main Checking</option>'+
+    '<option value="bills">Bills account</option></select></div>'+
+    '<div class="btn-row"><button class="btn ghost" onclick="closeModal()">Cancel</button>'+
+    '<button class="btn" onclick="confirmIncome()">Add it ✓</button></div>');
+}
+function confirmIncome(){
+  const what=$('#inWhat').value.trim()||'Extra money',amt=+$('#inAmt').value||0,acct=$('#inAcct').value;
+  if(!amt){toast('Enter an amount');return}
+  S.accounts[acct]=+(S.accounts[acct]+amt).toFixed(2);
+  log('income','💰 '+what+' → '+(acct==='main'?'Main Checking':acct==='bills'?'Bills account':'Savings'),amt);
+  closeModal();render();
+  toast(acct==='bills'?'Added — it’s unallocated; use Top up or Re-balance to spread it':acct==='main'?'Added to Main — it shows up under Extra':'Added to Savings ✓');
 }
 /* ---- unplanned expense ---- */
 function openExpense(){
