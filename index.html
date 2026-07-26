@@ -377,6 +377,27 @@ function clearPending(pid){
   log('bill',p.name+' cleared the bank',p.amt);
   render();toast(p.name+' cleared ✓');
 }
+function removePending(pid){
+  const p=S.pending.find(x=>x.id===pid);if(!p)return;
+  if(!confirm('Remove "'+p.name+'" from the list WITHOUT subtracting from Main?\n(Use Cleared ✓ instead if the payment actually came out.)'))return;
+  S.pending=S.pending.filter(x=>x.id!==pid);
+  render();toast('Removed — balances untouched');
+}
+function openAddPending(){
+  modal('<h3>Add a waiting-to-clear item</h3>'+
+    '<div class="muted small">For recording money that’s already sitting in Main to cover a payment — this does NOT move or change any balances. Use it to fix things by hand, like a transfer made outside the app.</div>'+
+    '<div class="field"><label>What is it for?</label><input id="apName" placeholder="GEICO Insurance"></div>'+
+    '<div class="field"><label>Amount</label><input id="apAmt" type="number" step="0.01" inputmode="decimal"></div>'+
+    '<div class="btn-row"><button class="btn ghost" onclick="closeModal()">Cancel</button>'+
+    '<button class="btn" onclick="confirmAddPending()">Add ✓</button></div>');
+}
+function confirmAddPending(){
+  const name=$('#apName').value.trim(),amt=+$('#apAmt').value||0;
+  if(!name||!amt){toast('Give it a name and an amount');return}
+  S.pending.push({id:'pd'+Date.now()+Math.floor(Math.random()*100000),billId:null,name,amt,d:todayISO()});
+  log('bill','Added waiting-to-clear item by hand: '+name,amt);
+  closeModal();render();toast('Added — tap Cleared when it comes out of the bank');
+}
 function rebalanceAll(){
   if(!confirm('Re-balance ALL bill funds?\n\nThis wipes the current per-bill amounts and re-spreads the whole Bills account so every bill sits exactly where its schedule says it should.'))return;
   S.bills.forEach(b=>b.saved=0);
@@ -591,14 +612,18 @@ function viewAccounts(){
   let h='<h2 class="section">Your accounts</h2>';
   h+='<div class="card"><div class="muted">Main Checking</div><div class="money big">'+fmt2(S.accounts.main)+'</div>'+
      '<div class="muted small">Paychecks land here · food & spending stays here</div>';
+  h+='<div class="muted small" style="margin-top:8px;font-weight:700;text-transform:uppercase;letter-spacing:.05em">Waiting to clear</div>';
   if((S.pending||[]).length){
-    h+='<div class="muted small" style="margin-top:8px;font-weight:700;text-transform:uppercase;letter-spacing:.05em">Waiting to clear</div>';
     for(const p of S.pending)
       h+='<div class="env-line"><div class="row"><div class="grow"><span class="title small">'+esc(p.name)+'</span>'+
          '<span class="muted small"> · moved in '+fmtDate(p.d)+'</span></div>'+
          '<div class="money small">'+fmt2(p.amt)+'</div>'+
-         '<button class="btn sm sec" onclick="clearPending(\''+p.id+'\')">Cleared ✓</button></div></div>';
+         '<button class="btn sm sec" onclick="clearPending(\''+p.id+'\')">Cleared ✓</button>'+
+         '<button class="link" onclick="removePending(\''+p.id+'\')" title="Remove without subtracting">✕</button></div></div>';
+  }else{
+    h+='<div class="muted small" style="padding:6px 0">Nothing waiting right now.</div>';
   }
+  h+='<div class="btn-row" style="margin-top:6px"><button class="btn ghost sm" onclick="openAddPending()">+ Add a waiting-to-clear item</button></div>';
   const emCats=Object.keys(S.earmarks||{}).map(id=>S.cats.find(c=>c.id===id)).filter(Boolean);
   if(emCats.length){
     h+='<div class="muted small" style="margin-top:8px;font-weight:700;text-transform:uppercase;letter-spacing:.05em">Set aside · shrinks as you log charges</div>';
