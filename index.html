@@ -213,6 +213,10 @@ if(S.v<3){
   }
   S.v=3;
 }
+if(S.v<4){
+  if(!S.tasks)S.tasks=[]; // paycheck to-dos: money moves only when a task is checked off
+  S.v=4;
+}
 /* ================= helpers ================= */
 const $=q=>document.querySelector(q);
 const fmt=n=>(n<0?'-':'')+'$'+Math.abs(n).toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0});
@@ -251,9 +255,11 @@ function fundedPct(b){return b.amt<=0?100:Math.min(999,Math.round(b.saved/b.amt*
 function envelopeTotal(){return S.bills.reduce((t,b)=>t+b.saved,0)}
 function pendingTotal(){return (S.pending||[]).reduce((t,p)=>t+p.amt,0)}
 function earmarkTotal(){return Object.values(S.earmarks||{}).reduce((t,v)=>t+v,0)}
-function mainExtra(){return +(S.accounts.main-pendingTotal()-earmarkTotal()).toFixed(2)}
+function tasksTotal(){return (S.tasks||[]).reduce((t,x)=>t+x.amt,0)}
+function mainExtra(){return +(S.accounts.main-pendingTotal()-earmarkTotal()-tasksTotal()).toFixed(2)}
 /* how much gets reserved in Main for a category each paycheck */
 function perCheckReserve(c){
+  if(typeof c.reserve==='number')return c.reserve;
   if(c.id==='c-food'&&S.plan.food)return S.plan.food;
   return +(c.monthly*12/52).toFixed(2);
 }
@@ -288,6 +294,9 @@ function toast(msg){const t=$('#toast');t.textContent=msg;t.classList.add('show'
 const HORIZON=7; // days ahead to surface bill actions
 function buildActions(){
   const acts=[],today=todayISO();
+  // open paycheck tasks first — money is sitting in Main until these are done
+  for(const t of (S.tasks||[]))
+    acts.push({kind:'task',id:'task-'+t.id,task:t,due:true,sort:'0'+t.d});
   // paychecks landed (or overdue to allocate)
   for(const p of S.people){
     if(!p.nextPay) continue;
@@ -405,12 +414,49 @@ function rebalanceAll(){
 }
 function openEarmarkEdit(cid){
   const c=S.cats.find(x=>x.id===cid);if(!c)return;
+  const custom=cid!=='c-food'&&cid!=='c-gas';
   modal('<h3>'+esc(c.name)+' money in Main</h3>'+
-    '<div class="muted small">This is how much of Main Checking is set aside for '+esc(c.name)+' right now. It grows each paycheck and shrinks as you log charges. Adjust it if it’s drifted from reality.</div>'+
+    '<div class="muted small">This is how much of Main Checking is set aside for '+esc(c.name)+' right now. It shrinks as you log charges. Adjust it if it’s drifted from reality.</div>'+
     '<div class="field"><label>Amount set aside ($)</label><input id="emAmt" type="number" step="0.01" inputmode="decimal" value="'+(S.earmarks[cid]||0)+'"></div>'+
-    '<div class="btn-row"><button class="btn ghost" onclick="closeModal()">Cancel</button>'+
-    '<button class="btn" onclick="S.earmarks[\''+cid+'\']=Math.max(0,+document.querySelector(\'#emAmt\').value||0);closeModal();render();toast(\'Updated ✓\')">Save ✓</button></div>');
+    '<div class="field"><label>Added automatically each paycheck ($)</label><input id="emRes" type="number" step="0.01" inputmode="decimal" value="'+perCheckReserve(c)+'"></div>'+
+    '<div class="btn-row">'+(custom?'<button class="btn danger" onclick="deleteBucket(\''+cid+'\')">Remove bucket</button>':'')+
+    '<button class="btn ghost" onclick="closeModal()">Cancel</button>'+
+    '<button class="btn" onclick="saveEarmark(\''+cid+'\')">Save ✓</button></div>');
 }
+function saveEarmark(cid){
+  const c=S.cats.find(x=>x.id===cid);if(!c)return;
+  S.earmarks[cid]=Math.max(0,+$('#emAmt').value||0);
+  const res=+$('#emRes').value;
+  if(!isNaN(res))c.reserve=Math.max(0,res);
+  closeModal();render();toast('Updated ✓');
+}
+function deleteBucket(cid){
+  const c=S.cats.find(x=>x.id===cid);if(!c)return;
+  if(!confirm('Remove the '+c.name+' bucket? Its money just becomes part of Extra — nothing is deleted from your accounts.'))return;
+  delete S.earmarks[cid];
+  if(!S.txns.some(t=>t.cat===cid))S.cats=S.cats.filter(x=>x.id!==cid);
+  closeModal();render();toast('Bucket removed');
+}
+function openAddBucket(){
+  modal('<h3>New money bucket</h3>'+
+    '<div class="muted small">A labeled pile inside Main Checking — clothes fund, vacation, Christmas. Log charges against it on the Spend tab and watch it count down. This doesn’t move real money; it labels what’s already in Main.</div>'+
+    '<div class="field"><label>Name</label><input id="bkName" placeholder="Clothes"></div>'+
+    '<div class="field"><label>How much is in it right now?</label><input id="bkAmt" type="number" step="0.01" inputmode="decimal" placeholder="600"></div>'+
+    '<div class="field"><label>Add automatically each paycheck (optional)</label><input id="bkRes" type="number" step="0.01" inputmode="decimal" placeholder="0"></div>'+
+    '<div class="btn-row"><button class="btn ghost" onclick="closeModal()">Cancel</button>'+
+    '<button class="btn" onclick="confirmAddBucket()">Create ✓</button></div>');
+}
+function confirmAddBucket(){
+  const name=$('#bkName').value.trim(),amt=+$('#bkAmt').value||0,res=+$('#bkRes').value||0;
+  if(!name){toast('Give it a name');return}
+  const id='c'+Date.now();
+  S.cats.push({id,name,monthly:0,show:true,reserve:res});
+  S.earmarks[id]=amt;
+  log('allocate','New bucket in Main: '+name,amt);
+  closeModal();render();toast(name+' bucket created ✓');
+}
+let SPEND_PRESEL=null;
+function gotoSpend(cid){SPEND_PRESEL=cid;TAB='spend';render();}
 /* ================= spending budgets ================= */
 function monthKey(){return todayISO().slice(0,7)}
 function monthLabel(){return new Date().toLocaleDateString('en-US',{month:'long'})}
@@ -472,7 +518,16 @@ function viewToday(){
     h+='<div class="banner"><b>No bills yet</b>Add your bills on the Bills tab (the + button) — amounts, how often, and the day they’re due. The app takes it from there.</div>';
   if(!acts.length) h+='<div class="card empty">Nothing to do right now. 🎉<br>Check back on payday.</div>';
   for(const a of acts){
-    if(a.kind==='paycheck'){
+    if(a.kind==='task'){
+      const t=a.task;
+      h+='<div class="card action due"><div class="row">'+
+        '<div class="grow"><div class="when">To do · from '+fmtDate(t.d)+'</div>'+
+        '<div class="title">'+taskIcon(t)+' '+esc(t.label)+' — '+fmt(t.amt)+'</div>'+
+        '<div class="muted">Money stays in Main until you check this off.</div></div>'+
+        '<div style="display:flex;flex-direction:column;gap:6px;align-items:end">'+
+        '<button class="btn sm" onclick="openTaskDone(\''+t.id+'\')">Done ✓</button>'+
+        '<button class="link" onclick="removeTask(\''+t.id+'\')">✕</button></div></div></div>';
+    }else if(a.kind==='paycheck'){
       const p=a.person;
       h+='<div class="card action'+(a.due?' due':'')+'"><div class="row">'+
         '<div class="grow"><div class="when">Paycheck · '+fmtDate(a.date)+'</div>'+
@@ -525,6 +580,7 @@ function viewToday(){
 }
 function viewSpend(){
   const mk=monthKey();
+  const presel=SPEND_PRESEL;SPEND_PRESEL=null;
   let h='<h2 class="section">Log a charge</h2>';
   h+='<div class="card">'+
     '<div class="grid2"><div class="field" style="margin-top:0"><label>Where / what</label>'+
@@ -532,7 +588,7 @@ function viewSpend(){
     '<div class="field" style="margin-top:0"><label>Amount $</label>'+
     '<input id="txAmt" type="number" step="0.01" inputmode="decimal" placeholder="35"></div></div>'+
     '<div class="grid2"><div class="field"><label>Comes out of</label><select id="txCat">'+
-    S.cats.map(c=>'<option value="'+c.id+'">'+esc(c.name)+'</option>').join('')+'</select></div>'+
+    S.cats.map(c=>'<option value="'+c.id+'"'+(presel===c.id?' selected':'')+'>'+esc(c.name)+'</option>').join('')+'</select></div>'+
     '<div class="field"><label>Date</label><input id="txDate" type="date" value="'+todayISO()+'"></div></div>'+
     '<div class="field"><label>Paid with</label><select id="txHow">'+
     '<option value="card">Card / Main Checking</option><option value="cash">Cash envelope (don’t touch accounts)</option></select></div>'+
@@ -624,14 +680,26 @@ function viewAccounts(){
     h+='<div class="muted small" style="padding:6px 0">Nothing waiting right now.</div>';
   }
   h+='<div class="btn-row" style="margin-top:6px"><button class="btn ghost sm" onclick="openAddPending()">+ Add a waiting-to-clear item</button></div>';
+  if((S.tasks||[]).length){
+    h+='<div class="muted small" style="margin-top:8px;font-weight:700;text-transform:uppercase;letter-spacing:.05em">To move · paycheck tasks not done yet</div>';
+    for(const t of S.tasks)
+      h+='<div class="env-line"><div class="row"><div class="grow"><span class="title small">'+taskIcon(t)+' '+esc(t.label)+'</span></div>'+
+         '<div class="money small">'+fmt2(t.amt)+'</div>'+
+         '<button class="btn sm sec" onclick="openTaskDone(\''+t.id+'\')">Done ✓</button></div></div>';
+  }
   const emCats=Object.keys(S.earmarks||{}).map(id=>S.cats.find(c=>c.id===id)).filter(Boolean);
   if(emCats.length){
-    h+='<div class="muted small" style="margin-top:8px;font-weight:700;text-transform:uppercase;letter-spacing:.05em">Set aside · shrinks as you log charges</div>';
-    for(const c of emCats)
-      h+='<div class="env-line" style="cursor:pointer" onclick="openEarmarkEdit(\''+c.id+'\')"><div class="row">'+
-         '<div class="grow"><span class="title small">'+esc(c.name)+'</span></div>'+
-         '<div class="money small">'+fmt2(S.earmarks[c.id]||0)+'</div></div></div>';
+    h+='<div class="muted small" style="margin-top:8px;font-weight:700;letter-spacing:.05em;text-transform:uppercase">Set aside · tap to spend from it</div>';
+    for(const c of emCats){
+      const res=perCheckReserve(c);
+      h+='<div class="env-line" style="cursor:pointer" onclick="gotoSpend(\''+c.id+'\')"><div class="row">'+
+         '<div class="grow"><span class="title small">'+esc(c.name)+'</span>'+
+         (res>0?'<div class="muted small">+'+fmt(res)+' each paycheck</div>':'')+'</div>'+
+         '<div class="money small">'+fmt2(S.earmarks[c.id]||0)+'</div>'+
+         '<button class="link" onclick="event.stopPropagation();openEarmarkEdit(\''+c.id+'\')">✎</button></div></div>';
+    }
   }
+  h+='<div class="btn-row" style="margin-top:6px"><button class="btn ghost sm" onclick="openAddBucket()">+ Add a money bucket (clothes, vacation…)</button></div>';
   const extra=mainExtra();
   h+='<div class="stay'+(extra<0?' neg':'')+'" style="margin-top:10px"><span>Extra — not spoken for</span><span>'+fmt2(extra)+'</span>'+
      (extra<0?'<div class="small" style="font-weight:400">Main is short of what it’s supposed to be covering</div>':'')+'</div>';
@@ -725,7 +793,7 @@ function openPaycheck(pid){
     '<div class="field"><label>Changed the numbers? Why? (optional — gets logged so next year you plan for it)</label>'+
     '<input type="text" id="alWhy" placeholder="e.g. school clothes $250"></div>'+
     '<div class="btn-row"><button class="btn ghost" onclick="closeModal()">Cancel</button>'+
-    '<button class="btn" onclick="confirmPaycheck(\''+p.id+'\','+bills+','+savings+')">Done — I made the transfers ✓</button></div>');
+    '<button class="btn" onclick="confirmPaycheck(\''+p.id+'\','+bills+','+savings+')">Looks right — create my tasks ✓</button></div>');
   allocRecalc(p.amount);
 }
 function allocRecalc(amount){
@@ -741,29 +809,59 @@ function confirmPaycheck(pid,defBills,defSav){
   const b=+$('#alBills').value||0,s=+$('#alSav').value||0,c=+$('#alCash').value||0;
   const why=$('#alWhy').value.trim();
   if(p.amount-b-s-c<0&&!confirm('Allocations exceed the paycheck. Continue anyway?'))return;
-  // move money
-  S.accounts.main+=p.amount-b-s-c;
-  S.accounts.bills+=b;
-  S.accounts.savings+=s;
-  // distribute bills transfer across envelopes proportional to weekly need (exact to the cent)
-  const wTot=S.bills.reduce((t,x)=>t+weeklyNeed(x),0)||1;
-  let dist=0;
-  for(const bill of S.bills){const add=+(b*weeklyNeed(bill)/wTot).toFixed(2);bill.saved=+(bill.saved+add).toFixed(2);dist+=add;}
-  const drift=+(b-dist).toFixed(2);
-  if(drift&&S.bills.length){const big=S.bills.reduce((a,x)=>x.amt>a.amt?x:a);big.saved=+(big.saved+drift).toFixed(2);}
+  // the whole check lands in Main; nothing else moves until each task is checked off
+  S.accounts.main=+(S.accounts.main+p.amount).toFixed(2);
+  const stamp=Date.now();
+  if(b>0)S.tasks.push({id:'tk'+stamp+'b',type:'bills',label:'Transfer to Bills account',amt:b,d:todayISO()});
+  if(s>0)S.tasks.push({id:'tk'+stamp+'s',type:'savings',label:'Transfer to Savings',amt:s,d:todayISO()});
+  if(c>0)S.tasks.push({id:'tk'+stamp+'c',type:'cash',label:'Withdraw cash · $'+S.plan.allowCash+' allowances + $'+S.plan.entCash+' entertainment bag',amt:c,d:todayISO()});
   // log deviations
   if(why||b!==defBills||s!==defSav){
     const diff=(defBills-b)+(defSav-s);
     if(why){S.expenses.unshift({d:todayISO(),text:why,amt:Math.max(diff,0)||Math.abs(diff)});}
   }
-  // reserve this check's food & gas money inside Main
+  // reserve this check's food & gas (and custom bucket) money inside Main
   for(const cid of Object.keys(S.earmarks||{})){
     const cat=S.cats.find(x=>x.id===cid);
     if(cat)S.earmarks[cid]=+(S.earmarks[cid]+perCheckReserve(cat)).toFixed(2);
   }
-  log('paycheck',p.name+'’s paycheck allocated · Bills '+fmt(b)+' · Savings '+fmt(s)+' · Cash '+fmt(c),p.amount);
+  log('paycheck',p.name+'’s paycheck landed in Main · tasks: Bills '+fmt(b)+' · Savings '+fmt(s)+' · Cash '+fmt(c),p.amount);
   p.nextPay=addDays(p.nextPay,14);
-  closeModal();render();toast('Paycheck allocated ✓');
+  closeModal();render();toast('Paycheck in Main — check off each task as you do it ✓');
+}
+/* ---- paycheck tasks: money moves only when you check them off ---- */
+function taskIcon(t){return t.type==='bills'?'🏦':t.type==='savings'?'💰':'💵'}
+function openTaskDone(tid){
+  const t=S.tasks.find(x=>x.id===tid);if(!t)return;
+  modal('<h3>'+taskIcon(t)+' '+esc(t.label)+'</h3>'+
+    '<div class="muted small">How much actually moved? Edit if it wasn’t exactly the plan.</div>'+
+    '<div class="field"><label>Amount</label><input id="tdAmt" type="number" step="0.01" inputmode="decimal" value="'+t.amt+'"></div>'+
+    '<div class="btn-row"><button class="btn ghost" onclick="closeModal()">Cancel</button>'+
+    '<button class="btn" onclick="confirmTaskDone(\''+t.id+'\')">Done ✓</button></div>');
+}
+function confirmTaskDone(tid){
+  const t=S.tasks.find(x=>x.id===tid);if(!t)return;
+  const amt=+$('#tdAmt').value||t.amt;
+  S.accounts.main=+(S.accounts.main-amt).toFixed(2);
+  if(t.type==='bills'){
+    S.accounts.bills=+(S.accounts.bills+amt).toFixed(2);
+    const wTot=S.bills.reduce((tt,x)=>tt+weeklyNeed(x),0)||1;
+    let dist=0;
+    for(const bill of S.bills){const add=+(amt*weeklyNeed(bill)/wTot).toFixed(2);bill.saved=+(bill.saved+add).toFixed(2);dist+=add;}
+    const drift=+(amt-dist).toFixed(2);
+    if(drift&&S.bills.length){const big=S.bills.reduce((a,x)=>x.amt>a.amt?x:a);big.saved=+(big.saved+drift).toFixed(2);}
+  }else if(t.type==='savings'){
+    S.accounts.savings=+(S.accounts.savings+amt).toFixed(2);
+  } // cash: it just leaves Main into the physical envelopes
+  S.tasks=S.tasks.filter(x=>x.id!==tid);
+  log('task','✓ '+t.label,amt);
+  closeModal();render();toast('Done ✓');
+}
+function removeTask(tid){
+  const t=S.tasks.find(x=>x.id===tid);if(!t)return;
+  if(!confirm('Remove this task WITHOUT moving any money?\n\n'+t.label+' · '+fmt(t.amt)))return;
+  S.tasks=S.tasks.filter(x=>x.id!==tid);
+  render();toast('Task removed — balances untouched');
 }
 /* ---- pay a bill ---- */
 function openPayBill(bid){
@@ -825,10 +923,15 @@ function openBalances(isReconcile){
     '<button class="btn" onclick="confirmBalances('+(isReconcile?'true':'false')+')">Save ✓</button></div>');
 }
 function confirmBalances(isReconcile){
+  const was={...S.accounts};
   S.accounts.main=+$('#balMain').value||0;
   S.accounts.bills=+$('#balBills').value||0;
   S.accounts.savings=+$('#balSav').value||0;
-  if(isReconcile){S.lastReconcile=todayISO();log('reconcile','Balances updated from bank');}
+  const changes=[];
+  for(const k of ['main','bills','savings'])
+    if(was[k]!==S.accounts[k])changes.push(k+' '+fmt2(was[k])+'→'+fmt2(S.accounts[k]));
+  log('reconcile','Balances set by hand'+(changes.length?' · '+changes.join(' · '):' (no change)'));
+  if(isReconcile)S.lastReconcile=todayISO();
   closeModal();render();toast('Balances saved ✓');
 }
 /* ---- bill add/edit ---- */
