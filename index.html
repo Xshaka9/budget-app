@@ -912,16 +912,25 @@ function viewMore(){
 function modal(html){$('#modalRoot').innerHTML='<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="sheet">'+html+'</div></div>'}
 function closeModal(){$('#modalRoot').innerHTML=''}
 /* ---- paycheck allocation ---- */
+function reservesTotal(){
+  return Object.keys(S.earmarks||{}).reduce((t,id)=>{
+    const c=S.cats.find(x=>x.id===id);
+    return t+(c?perCheckReserve(c):0);
+  },0);
+}
 function openPaycheck(pid){
   const p=S.people.find(x=>x.id===pid);
+  const extra=isExtraPaycheck(p,p.nextPay);
   const bills=Math.round(billsTransferAmt());
   const cash=S.plan.entCash+S.plan.allowCash;
-  const savings=Math.max(0,Math.round(p.amount-bills-cash-S.plan.food));
-  const extra=isExtraPaycheck(p,p.nextPay);
+  const savings=Math.max(0,Math.floor(p.amount-bills-cash-reservesTotal()));
   modal('<h3>💵 Allocate '+esc(p.name)+'’s paycheck</h3>'+
     '<div class="muted small">'+fmtDate(p.nextPay)+' · '+fmt(p.amount)+' landed in Main Checking'+
     (extra?' · <b style="color:#7a5a12">extra paycheck!</b>':'')+'</div>'+
-    (extra?'<div class="banner gold" style="margin-top:10px"><b>3rd check this month</b>Bills & food are already covered by the first two — consider sending most of this one to Savings.</div>':'')+
+    (extra?'<div class="banner gold" style="margin-top:10px"><b>🌟 3rd check this month</b>Your buckets refill weekly (a check comes every week), so this check funds a normal week by default. If Food/Gas/Misc are sitting on a surplus, flip Golden mode below to skip the refills & cash and sweep the difference to Savings.</div>':'')+
+    (extra?'<div class="alloc-line"><div class="lbl">🌟 Golden mode<br><span class="muted small">skip this week’s refills & cash → all to Savings</span></div>'+
+      '<input type="checkbox" id="alGold" style="width:auto;transform:scale(1.4)" onchange="goldenToggle()"></div>'
+      :'<input type="hidden" id="alGold">')+
     '<div style="margin-top:8px">'+
     '<div class="alloc-line"><div class="lbl">💵 Actual paycheck amount<br><span class="muted small">edit if it’s different — overtime, bonus…</span></div>'+
       '<input type="number" id="alAmt" value="'+p.amount+'" step="0.01" inputmode="decimal" oninput="allocRecalc()"></div>'+
@@ -939,14 +948,26 @@ function openPaycheck(pid){
     '<button class="btn" onclick="confirmPaycheck(\''+p.id+'\','+bills+','+savings+')">Looks right — create my tasks ✓</button></div>');
   allocRecalc();
 }
+function goldenToggle(){
+  const on=$('#alGold').checked;
+  const amount=+$('#alAmt').value||0;
+  const b=+$('#alBills').value||0;
+  $('#alCash').value=on?0:S.plan.entCash+S.plan.allowCash;
+  $('#alSav').value=Math.max(0,Math.floor(amount-b-(+$('#alCash').value||0)-(on?0:reservesTotal())));
+  allocRecalc();
+}
 function allocRecalc(){
   const amount=+$('#alAmt').value||0;
   const b=+$('#alBills').value||0,s=+$('#alSav').value||0,c=+$('#alCash').value||0;
   const stay=amount-b-s-c;
+  const golden=$('#alGold')&&$('#alGold').checked;
+  const res=golden?0:reservesTotal();
   const el=$('#alStay');
-  el.className='stay'+(stay<0?' neg':'');
-  el.innerHTML='<span>Stays in Main (food '+fmt(S.plan.food)+' + spending)</span><span>'+fmt2(stay)+'</span>'+
-    (stay<0?'<div class="small" style="font-weight:400">That’s more than the paycheck!</div>':'');
+  el.className='stay'+(stay<res?' neg':'');
+  el.innerHTML='<span>Stays in Main · buckets will claim '+fmt(res)+'</span><span>'+fmt2(stay)+'</span>'+
+    (stay<0?'<div class="small" style="font-weight:400">That’s more than the paycheck!</div>':
+     stay<res?'<div class="small" style="font-weight:400">Short of the bucket refills — Extra will go negative by '+fmt(res-stay)+'</div>':
+     '<div class="small" style="font-weight:400">'+fmt2(stay-res)+' will land in Extra</div>');
 }
 function confirmPaycheck(pid,defBills,defSav){
   const p=S.people.find(x=>x.id===pid);
@@ -965,12 +986,15 @@ function confirmPaycheck(pid,defBills,defSav){
     const diff=(defBills-b)+(defSav-s);
     if(why){S.expenses.unshift({d:todayISO(),text:why,amt:Math.max(diff,0)||Math.abs(diff)});}
   }
-  // reserve this check's food & gas (and custom bucket) money inside Main
-  for(const cid of Object.keys(S.earmarks||{})){
-    const cat=S.cats.find(x=>x.id===cid);
-    if(cat)S.earmarks[cid]=+(S.earmarks[cid]+perCheckReserve(cat)).toFixed(2);
+  // reserve this check's food & gas (and custom bucket) money inside Main — skipped only in golden mode
+  const golden=$('#alGold')&&$('#alGold').checked;
+  if(!golden){
+    for(const cid of Object.keys(S.earmarks||{})){
+      const cat=S.cats.find(x=>x.id===cid);
+      if(cat)S.earmarks[cid]=+(S.earmarks[cid]+perCheckReserve(cat)).toFixed(2);
+    }
   }
-  log('paycheck',p.name+'’s paycheck ('+fmt2(amount)+') landed in Main · tasks: Bills '+fmt(b)+' · Savings '+fmt(s)+' · Cash '+fmt(c),amount);
+  log('paycheck',p.name+'’s paycheck ('+fmt2(amount)+')'+(golden?' 🌟 golden check':'')+' landed in Main · tasks: Bills '+fmt(b)+' · Savings '+fmt(s)+' · Cash '+fmt(c),amount);
   p.nextPay=addDays(p.nextPay,14);
   closeModal();render();toast('Paycheck in Main — check off each task as you do it ✓');
 }
