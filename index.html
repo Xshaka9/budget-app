@@ -575,7 +575,7 @@ function budgetBarsHTML(compact){
         '<div class="money" style="color:'+(left<=0?'var(--bad)':res>0&&left<res*.25?'var(--warn)':'var(--good)')+'">'+fmt2(left)+' left</div></div></div>';
       continue;
     }
-    if(!c.monthly&&!spent)continue; // nothing budgeted, nothing spent — no need to show it
+    if(!c.monthly)continue; // no bucket and no monthly budget = log-only category, keep the list clean
     const pct=c.monthly>0?Math.round(spent/c.monthly*100):0;
     const left=c.monthly-spent;
     const col=c.monthly>0?(pct>100?'var(--bad)':pct>=80?'var(--warn)':'var(--good)'):'var(--muted)';
@@ -923,21 +923,24 @@ function openPaycheck(pid){
     (extra?' · <b style="color:#7a5a12">extra paycheck!</b>':'')+'</div>'+
     (extra?'<div class="banner gold" style="margin-top:10px"><b>3rd check this month</b>Bills & food are already covered by the first two — consider sending most of this one to Savings.</div>':'')+
     '<div style="margin-top:8px">'+
+    '<div class="alloc-line"><div class="lbl">💵 Actual paycheck amount<br><span class="muted small">edit if it’s different — overtime, bonus…</span></div>'+
+      '<input type="number" id="alAmt" value="'+p.amount+'" step="0.01" inputmode="decimal" oninput="allocRecalc()"></div>'+
     '<div class="alloc-line"><div class="lbl">→ Bills account<br><span class="muted small">covers this week’s slice of every bill</span></div>'+
-      '<input type="number" id="alBills" value="'+bills+'" step="1" inputmode="decimal" oninput="allocRecalc('+p.amount+')"></div>'+
+      '<input type="number" id="alBills" value="'+bills+'" step="1" inputmode="decimal" oninput="allocRecalc()"></div>'+
     '<div class="alloc-line"><div class="lbl">→ Savings account</div>'+
-      '<input type="number" id="alSav" value="'+savings+'" step="1" inputmode="decimal" oninput="allocRecalc('+p.amount+')"></div>'+
+      '<input type="number" id="alSav" value="'+savings+'" step="1" inputmode="decimal" oninput="allocRecalc()"></div>'+
     '<div class="alloc-line"><div class="lbl">💵 Cash out<br><span class="muted small">$'+S.plan.allowCash+' allowances + $'+S.plan.entCash+' entertainment bag</span></div>'+
-      '<input type="number" id="alCash" value="'+cash+'" step="1" inputmode="decimal" oninput="allocRecalc('+p.amount+')"></div>'+
+      '<input type="number" id="alCash" value="'+cash+'" step="1" inputmode="decimal" oninput="allocRecalc()"></div>'+
     '</div>'+
     '<div class="stay" id="alStay"></div>'+
     '<div class="field"><label>Changed the numbers? Why? (optional — gets logged so next year you plan for it)</label>'+
     '<input type="text" id="alWhy" placeholder="e.g. school clothes $250"></div>'+
     '<div class="btn-row"><button class="btn ghost" onclick="closeModal()">Cancel</button>'+
     '<button class="btn" onclick="confirmPaycheck(\''+p.id+'\','+bills+','+savings+')">Looks right — create my tasks ✓</button></div>');
-  allocRecalc(p.amount);
+  allocRecalc();
 }
-function allocRecalc(amount){
+function allocRecalc(){
+  const amount=+$('#alAmt').value||0;
   const b=+$('#alBills').value||0,s=+$('#alSav').value||0,c=+$('#alCash').value||0;
   const stay=amount-b-s-c;
   const el=$('#alStay');
@@ -947,11 +950,12 @@ function allocRecalc(amount){
 }
 function confirmPaycheck(pid,defBills,defSav){
   const p=S.people.find(x=>x.id===pid);
+  const amount=+$('#alAmt').value||p.amount; // actual check — may include overtime/bonus
   const b=+$('#alBills').value||0,s=+$('#alSav').value||0,c=+$('#alCash').value||0;
   const why=$('#alWhy').value.trim();
-  if(p.amount-b-s-c<0&&!confirm('Allocations exceed the paycheck. Continue anyway?'))return;
+  if(amount-b-s-c<0&&!confirm('Allocations exceed the paycheck. Continue anyway?'))return;
   // the whole check lands in Main; nothing else moves until each task is checked off
-  S.accounts.main=+(S.accounts.main+p.amount).toFixed(2);
+  S.accounts.main=+(S.accounts.main+amount).toFixed(2);
   const stamp=Date.now();
   if(b>0)S.tasks.push({id:'tk'+stamp+'b',type:'bills',label:'Transfer to Bills account',amt:b,d:todayISO()});
   if(s>0)S.tasks.push({id:'tk'+stamp+'s',type:'savings',label:'Transfer to Savings',amt:s,d:todayISO()});
@@ -966,7 +970,7 @@ function confirmPaycheck(pid,defBills,defSav){
     const cat=S.cats.find(x=>x.id===cid);
     if(cat)S.earmarks[cid]=+(S.earmarks[cid]+perCheckReserve(cat)).toFixed(2);
   }
-  log('paycheck',p.name+'’s paycheck landed in Main · tasks: Bills '+fmt(b)+' · Savings '+fmt(s)+' · Cash '+fmt(c),p.amount);
+  log('paycheck',p.name+'’s paycheck ('+fmt2(amount)+') landed in Main · tasks: Bills '+fmt(b)+' · Savings '+fmt(s)+' · Cash '+fmt(c),amount);
   p.nextPay=addDays(p.nextPay,14);
   closeModal();render();toast('Paycheck in Main — check off each task as you do it ✓');
 }
