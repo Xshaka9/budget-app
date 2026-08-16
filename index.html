@@ -255,8 +255,10 @@ function nextDue(b){
     while(d<parseISO(b.lastPaid)) d=clampDay(d.getFullYear(),d.getMonth()+b.months,b.dueDay||15);
     return iso(d);
   }
-  let d=clampDay(t.getFullYear(),t.getMonth(),b.dueDay||15);
-  while(iso(d)<todayISO()) d=clampDay(d.getFullYear(),d.getMonth()+b.months,b.dueDay||15);
+  // never paid in-app: keep a missed due date visible as overdue for 14 days instead of silently rolling forward
+  const floor=addDays(todayISO(),-14);
+  let d=clampDay(t.getFullYear(),t.getMonth()-b.months,b.dueDay||15);
+  while(iso(d)<floor) d=clampDay(d.getFullYear(),d.getMonth()+b.months,b.dueDay||15);
   return iso(d);
 }
 function fundedPct(b){return b.amt<=0?100:Math.min(999,Math.round(b.saved/b.amt*100))}
