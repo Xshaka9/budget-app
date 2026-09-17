@@ -451,6 +451,10 @@ function openEarmarkEdit(cid){
     '<div class="muted small">This is how much of Main Checking is set aside for '+esc(c.name)+' right now. It shrinks as you log charges. Adjust it if it’s drifted from reality.</div>'+
     '<div class="field"><label>Amount set aside ($)</label><input id="emAmt" type="number" step="0.01" inputmode="decimal" value="'+(S.earmarks[cid]||0)+'"></div>'+
     '<div class="field"><label>Added automatically each paycheck ($)</label><input id="emRes" type="number" step="0.01" inputmode="decimal" value="'+perCheckReserve(c)+'"></div>'+
+    ((S.earmarks[cid]||0)>0?'<h2 class="section" style="margin-top:14px">Done spending? Send the leftover back</h2>'+
+    '<div class="field"><label>Amount to return ($)</label><input id="emBack" type="number" step="0.01" inputmode="decimal" value="'+(S.earmarks[cid]||0)+'"></div>'+
+    '<div class="btn-row"><button class="btn sec" onclick="returnEarmark(\''+cid+'\')">↩ Back to Bills account</button></div>'+
+    '<div class="muted small">Goes back into the '+esc(c.name)+' savings bucket if one exists (otherwise unallocated). Make the matching Main → Bills transfer at the bank. If this empties the pile'+(perCheckReserve(c)>0?'':' it disappears from the Set aside list')+'.</div>':'')+
     '<div class="btn-row">'+(custom?'<button class="btn danger" onclick="deleteBucket(\''+cid+'\')">Remove bucket</button>':'')+
     '<button class="btn ghost" onclick="closeModal()">Cancel</button>'+
     '<button class="btn" onclick="saveEarmark(\''+cid+'\')">Save ✓</button></div>');
@@ -461,6 +465,28 @@ function saveEarmark(cid){
   const res=+$('#emRes').value;
   if(!isNaN(res))c.reserve=Math.max(0,res);
   closeModal();render();toast('Updated ✓');
+}
+/* send leftover spending money back to the Bills account — into the same-named
+   savings bucket if one exists, otherwise unallocated. Empties → drops off the list. */
+function returnEarmark(cid){
+  const c=S.cats.find(x=>x.id===cid);if(!c)return;
+  let x=+$('#emBack').value||0;
+  if(x<=0){toast('Enter an amount to return');return}
+  x=Math.min(x,S.earmarks[cid]||0);
+  if(x<=0){toast('Nothing set aside to return');return}
+  S.earmarks[cid]=+((S.earmarks[cid]||0)-x).toFixed(2);
+  S.accounts.main=+(S.accounts.main-x).toFixed(2);
+  S.accounts.bills=+(S.accounts.bills+x).toFixed(2);
+  const sb=S.bills.find(b=>b.bucket&&b.name.trim().toLowerCase()===c.name.trim().toLowerCase());
+  if(sb)sb.saved=+(sb.saved+x).toFixed(2);
+  const core=cid==='c-food'||cid==='c-gas'||cid==='c-other';
+  if(S.earmarks[cid]===0&&perCheckReserve(c)===0&&!core){
+    delete S.earmarks[cid];
+    if(!S.txns.some(t=>t.cat===cid))S.cats=S.cats.filter(cc=>cc.id!==cid);
+  }
+  log('allocate','↩ '+fmt2(x)+' leftover '+c.name+' money → Bills account'+(sb?' ('+sb.name+' bucket)':' (unallocated)'),x);
+  closeModal();render();
+  toast('Returned '+fmt(x)+' — make the Main → Bills transfer of '+fmt(x)+' at the bank');
 }
 function deleteBucket(cid){
   const c=S.cats.find(x=>x.id===cid);if(!c)return;
@@ -679,8 +705,8 @@ function viewToday(){
         '<div class="title">✍️ Enter recent transactions</div>'+
         '<div class="muted">Log into the bank, enter new charges on the Spend tab, then update the three balances.</div></div>'+
         '<div style="display:flex;flex-direction:column;gap:6px">'+
-        '<button class="btn sm sec" onclick="TAB=\'spend\';render()">Charges</button>'+
-        '<button class="btn sm" onclick="openBalances(true)">Balances ✓</button></div></div></div>';
+        '<button class="btn sm" onclick="openCatchUp()">⚖️ Catch up</button>'+
+        '<button class="btn sm sec" onclick="openBalances(true)">Balances ✓</button></div></div></div>';
     }
   }
   const up=upcomingPreview();
@@ -702,8 +728,84 @@ function viewToday(){
   h+='<h2 class="section">Quick actions</h2><div class="card">'+
      '<div class="btn-row" style="margin-top:0"><button class="btn ghost" onclick="openIncome()">💰 Add money</button>'+
      '<button class="btn ghost" onclick="openExpense()">Log unplanned expense</button></div>'+
-     '<div class="btn-row"><button class="btn ghost" onclick="openBalances(false)">Edit balances</button></div></div>';
+     '<div class="btn-row"><button class="btn ghost" onclick="openCatchUp()">⚖️ Catch up with the bank</button>'+
+     '<button class="btn ghost" onclick="openBalances(false)">Edit balances</button></div></div>';
   return h;
+}
+/* ================= catch-up: close the gap with the bank, guided ================= */
+function openCatchUp(){
+  const pend=(S.pending||[]),tasks=(S.tasks||[]);
+  let remind='';
+  if(pend.length)
+    remind+='<div class="banner" style="margin-top:10px"><b>Waiting to clear · '+fmt2(pendingTotal())+' still in Main</b>'+
+      pend.map(p=>esc(p.name)+' '+fmt2(p.amt)).join(' · ')+
+      ' — if a payment actually came out at the bank, close this and tap Cleared on it first. And if a bill payment here was covered from Main, make sure you made the matching Bills → Main transfer at the bank!</div>';
+  if(tasks.length)
+    remind+='<div class="banner"><b>Paycheck tasks not done · '+fmt2(tasksTotal())+'</b>The app is holding this in Main for transfers/cash you haven’t checked off.</div>';
+  modal('<h3>⚖️ Catch up with the bank</h3>'+
+    '<div class="muted small">Open your bank app and type Main Checking’s available balance (the one that includes processing). Then knock the gap down to zero by logging what’s missing — the gap updates with every entry.</div>'+
+    '<div class="field"><label>Bank says Main Checking is $</label><input id="cuBank" type="number" step="0.01" inputmode="decimal" oninput="cuRecalc()"></div>'+
+    '<div class="stay" id="cuGap"><span>Enter the balance above</span><span>—</span></div>'+
+    remind+
+    '<h2 class="section" style="margin-top:14px">Log what’s missing</h2>'+
+    '<div class="grid2"><div class="field" style="margin-top:0"><label>Where / what</label><input id="cuWho" placeholder="Walmart"></div>'+
+    '<div class="field" style="margin-top:0"><label>Amount $</label><input id="cuAmt" type="number" step="0.01" inputmode="decimal" oninput="cuRecalc()"></div></div>'+
+    '<div class="grid2"><div class="field"><label>Comes out of</label><select id="cuCat">'+
+      S.cats.map(c=>'<option value="'+c.id+'">'+esc(c.name)+'</option>').join('')+'</select></div>'+
+    '<div class="field"><label>Direction</label><select id="cuDir"><option value="out">Charge — money out</option><option value="in">Refund / deposit — money in</option></select></div></div>'+
+    '<div class="btn-row"><button class="btn sec" onclick="cuAdd()">Log it → next</button></div>'+
+    '<div class="muted small" id="cuDone" style="margin-top:6px"></div>'+
+    '<div class="btn-row"><button class="btn ghost" onclick="closeModal();render()">Close</button>'+
+    '<button class="btn" id="cuFinish" style="display:none" onclick="cuFinishUp()">Absorb '+ '<span id="cuFinAmt"></span>'+' & mark reconciled ✓</button></div>');
+  cuRecalc();
+}
+function cuRecalc(){
+  const el=$('#cuGap');if(!el)return;
+  const raw=$('#cuBank').value;
+  const fin=$('#cuFinish');
+  if(raw===''){el.className='stay';el.innerHTML='<span>Enter the balance above</span><span>—</span>';if(fin)fin.style.display='none';return}
+  const bank=+raw||0;
+  const gap=+(S.accounts.main-bank).toFixed(2);
+  if(Math.abs(gap)<0.005){
+    el.className='stay';el.innerHTML='<span>🎯 Matched to the penny</span><span>$0.00</span>';
+    if(fin)fin.style.display='none';
+  }else{
+    el.className='stay'+(Math.abs(gap)>2?' neg':'');
+    el.innerHTML='<span>App is '+fmt2(Math.abs(gap))+' '+(gap>0?'HIGHER — missing charges, or a Bills → Main transfer you never made':'LOWER — missing a refund/deposit, or something logged twice')+'</span><span>'+fmt2(gap)+'</span>';
+    if(fin){
+      const small=Math.abs(gap)<=2;
+      fin.style.display=small?'':'none';
+      if(small)$('#cuFinAmt').textContent=fmt2(Math.abs(gap));
+    }
+  }
+}
+function cuAdd(){
+  const who=$('#cuWho').value.trim(),amt=+$('#cuAmt').value||0,cid=$('#cuCat').value,dir=$('#cuDir').value;
+  if(!amt){toast('Enter an amount');return}
+  if(dir==='in'){
+    S.accounts.main=+(S.accounts.main+amt).toFixed(2);
+    log('income','💰 '+(who||'Deposit / refund')+' → Main Checking (catch-up)',amt);
+  }else{
+    const t={id:'t'+Date.now(),d:todayISO(),who,amt,cat:cid,how:'card'};
+    S.txns.unshift(t);
+    S.accounts.main=+(S.accounts.main-amt).toFixed(2);
+    if(S.earmarks[cid]!==undefined)S.earmarks[cid]=Math.max(0,+(S.earmarks[cid]-amt).toFixed(2));
+    const c=S.cats.find(x=>x.id===cid);
+    log('spend',(who||'Charge')+' → '+(c?c.name:'')+' (catch-up)',amt);
+  }
+  saveState();
+  const d=$('#cuDone');if(d)d.innerHTML=('✓ '+(dir==='in'?'+':'−')+fmt2(amt)+' '+esc(who||''))+'<br>'+d.innerHTML;
+  $('#cuWho').value='';$('#cuAmt').value='';
+  cuRecalc();
+  $('#cuWho').focus();
+}
+function cuFinishUp(){
+  const bank=+$('#cuBank').value||0;
+  const was=S.accounts.main;
+  S.accounts.main=bank;
+  S.lastReconcile=todayISO();
+  log('reconcile','⚖️ Caught up with the bank · main '+fmt2(was)+'→'+fmt2(bank));
+  closeModal();render();toast('Reconciled ✓ — app matches the bank');
 }
 function viewSpend(){
   const mk=monthKey();
@@ -1073,8 +1175,15 @@ function openPayBill(bid){
 }
 function confirmPayBill(bid,d){
   const b=S.bills.find(x=>x.id===bid);
-  const amt=+$('#pbAmt').value||b.amt;
+  const raw=$('#pbAmt').value.trim();
+  const amt=raw===''?b.amt:Math.max(0,+raw||0);
   const upd=$('#pbVar')&&$('#pbVar').checked;
+  if(amt===0){ // $0 = nothing actually paid: just advance the clock, move no money
+    b.lastPaid=d;
+    log('bill','Marked '+b.name+' paid at $0 — no money moved',0);
+    closeModal();render();toast(b.name+': marked paid, nothing moved');
+    return;
+  }
   S.accounts.bills=+(S.accounts.bills-amt).toFixed(2);
   S.accounts.main=+(S.accounts.main+amt).toFixed(2); // the transfer lands in Main until the payment clears
   S.pending.push({id:'pd'+Date.now()+Math.floor(Math.random()*1000),billId:b.id,name:b.name,amt,d:todayISO()});
@@ -1184,7 +1293,7 @@ function openBucketForm(bid){
       '<div class="field"><label>Amount $</label><input id="buOut" type="number" step="0.01" inputmode="decimal" placeholder="'+b.saved+'"></div>'+
       '<div class="btn-row"><button class="btn sec" onclick="bucketOut(\''+bid+'\',false)">↩ Back to Bills pool</button>'+
       '<button class="btn sec" onclick="bucketOut(\''+bid+'\',true)">→ To Main to spend</button></div>'+
-      '<div class="muted small">Back to pool = didn’t spend it, keep it working for the other bills. To Main = you’re about to spend it (shows under Waiting to clear).</div>'+
+      '<div class="muted small">Back to pool = didn’t spend it, keep it working for the other bills. To Main = ready to spend: it becomes a labeled pile in Main and appears in the Spend tab’s “comes out of” list, counting down with each charge.</div>'+
       '<div class="btn-row"><button class="btn ghost" onclick="bucketNextRound()">🔁 Start next round — advance date 1 year</button></div>':'')+
     '<div class="btn-row">'+(bid?'<button class="btn danger" onclick="deleteBill(\''+bid+'\')">Delete</button>':'')+
     '<button class="btn ghost" onclick="closeModal()">Cancel</button>'+
@@ -1217,9 +1326,15 @@ function bucketOut(bid,toMain){
   if(toMain){
     S.accounts.bills=+(S.accounts.bills-x).toFixed(2);
     S.accounts.main=+(S.accounts.main+x).toFixed(2);
-    S.pending.push({id:'pd'+Date.now()+Math.floor(Math.random()*100000),billId:b.id,name:b.name+' money',amt:x,d:todayISO()});
-    log('bill',fmt2(x)+' from '+b.name+' bucket → Main to spend',x);
-    toast('Transfer '+fmt(x)+' from Bills → Main at the bank, then spend away');
+    // land it as a labeled spending bucket in Main: shows in the Spend tab's "comes out of"
+    // dropdown and counts down charge by charge — no waiting-to-clear item
+    S.earmarks=S.earmarks||{};
+    let c=S.cats.find(cc=>cc.name.trim().toLowerCase()===b.name.trim().toLowerCase());
+    if(!c){c={id:'c'+Date.now(),name:b.name,monthly:0,show:true,reserve:0};S.cats.push(c);}
+    if(S.earmarks[c.id]===undefined)S.earmarks[c.id]=0;
+    S.earmarks[c.id]=+(S.earmarks[c.id]+x).toFixed(2);
+    log('bill',fmt2(x)+' from '+b.name+' bucket → “'+c.name+'” spending money in Main',x);
+    toast('Transfer '+fmt(x)+' Bills → Main at the bank — log charges against “'+c.name+'” on the Spend tab');
   }else{
     log('allocate',fmt2(x)+' from '+b.name+' bucket back to the Bills pool',x);
     toast(fmt(x)+' back in the pool — Top up will put it to work');
