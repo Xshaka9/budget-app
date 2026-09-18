@@ -767,11 +767,15 @@ function cuRecalc(){
   const bank=+raw||0;
   const gap=+(S.accounts.main-bank).toFixed(2);
   if(Math.abs(gap)<0.005){
-    el.className='stay';el.innerHTML='<span>🎯 Matched to the penny</span><span>$0.00</span>';
+    el.className='stay';el.style.flexDirection='row';
+    el.innerHTML='<span>🎯 Matched to the penny</span><span>$0.00</span>';
     if(fin)fin.style.display='none';
   }else{
     el.className='stay'+(Math.abs(gap)>2?' neg':'');
-    el.innerHTML='<span>App is '+fmt2(Math.abs(gap))+' '+(gap>0?'HIGHER — missing charges, or a Bills → Main transfer you never made':'LOWER — missing a refund/deposit, or something logged twice')+'</span><span>'+fmt2(gap)+'</span>';
+    el.style.flexDirection='column';
+    el.innerHTML='<div style="display:flex;justify-content:space-between;gap:10px;width:100%">'+
+      '<span>App is '+(gap>0?'HIGHER':'LOWER')+' than the bank by</span><span style="white-space:nowrap">'+fmt2(Math.abs(gap))+'</span></div>'+
+      '<div class="small" style="font-weight:400;margin-top:4px">'+(gap>0?'Look for missed charges — or a Bills → Main transfer made in the app but not at the bank.':'Look for a refund/deposit you didn’t log — or something logged twice.')+'</div>';
     if(fin){
       const small=Math.abs(gap)<=2;
       fin.style.display=small?'':'none';
@@ -1094,10 +1098,12 @@ function allocRecalc(){
   const res=golden?0:reservesTotal();
   const el=$('#alStay');
   el.className='stay'+(stay<res?' neg':'');
-  el.innerHTML='<span>Stays in Main · buckets will claim '+fmt(res)+'</span><span>'+fmt2(stay)+'</span>'+
-    (stay<0?'<div class="small" style="font-weight:400">That’s more than the paycheck!</div>':
-     stay<res?'<div class="small" style="font-weight:400">Short of the bucket refills — Extra will go negative by '+fmt(res-stay)+'</div>':
-     '<div class="small" style="font-weight:400">'+fmt2(stay-res)+' will land in Extra</div>');
+  el.style.flexDirection='column';
+  el.innerHTML='<div style="display:flex;justify-content:space-between;gap:10px;width:100%">'+
+    '<span>Stays in Main · buckets will claim '+fmt(res)+'</span><span style="white-space:nowrap">'+fmt2(stay)+'</span></div>'+
+    (stay<0?'<div class="small" style="font-weight:400;margin-top:4px">That’s more than the paycheck!</div>':
+     stay<res?'<div class="small" style="font-weight:400;margin-top:4px">Short of the bucket refills — Extra will go negative by '+fmt(res-stay)+'</div>':
+     '<div class="small" style="font-weight:400;margin-top:4px">'+fmt2(stay-res)+' will land in Extra</div>');
 }
 function confirmPaycheck(pid,defBills,defSav){
   const p=S.people.find(x=>x.id===pid);
